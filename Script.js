@@ -5,7 +5,7 @@ const odd = document.getElementById("odd");
 const signal = document.getElementById("signal");
 
 let evenCount = 0;
-let oddCount = 
+let oddCount = 0;
 function connect() {
     alert("The button is working!");
 }
