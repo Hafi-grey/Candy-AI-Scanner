@@ -5,12 +5,10 @@ const odd = document.getElementById("odd");
 const signal = document.getElementById("signal");
 
 let evenCount = 0;
-let oddCount = 0;
-
+let oddCount = 
 function connect() {
-
-    status.innerHTML = "Connecting...";
-
+    alert("The button is working!");
+}
     const ws = new WebSocket("wss://ws.derivws.com/websockets/v3?app_id=1089");
 
     ws.onopen = function () {
