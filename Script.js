@@ -1,4 +1,5 @@
-const status = document.getElementById("status");
+alert("Script loaded!");
+  const status = document.getElementById("status");
 const tick = document.getElementById("tick");
 const even = document.getElementById("even");
 const odd = document.getElementById("odd");
