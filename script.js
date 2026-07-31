@@ -22,8 +22,9 @@ document.addEventListener("DOMContentLoaded", () => {
             status.innerHTML = "Connected";
 
             ws.send(JSON.stringify({
-                ticks: "R_100"
-            }));
+    ticks: "R_100",
+    subscribe: 1
+}));
         };
 
         ws.onmessage = (msg) => {
