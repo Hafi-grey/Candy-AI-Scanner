@@ -26,39 +26,32 @@ document.addEventListener("DOMContentLoaded", () => {
     subscribe: 1
 }));
         };
+ws.onmessage = (msg) => {
 
-        ws.onmessage = (msg) => {
+    console.log(msg.data);
 
-            const data = JSON.parse(msg.data);
+    const data = JSON.parse(msg.data);
 
-            if (data.tick) {
+    if (data.tick) {
 
-                const lastDigit = data.tick.quote
-                    .toString()
-                    .slice(-1);
+        const lastDigit = data.tick.quote
+            .toString()
+            .slice(-1);
 
-                tick.innerHTML = lastDigit;
+        tick.innerHTML = lastDigit;
 
-                if (Number(lastDigit) % 2 === 0) {
-                    evenCount++;
-                    even.innerHTML = evenCount;
-                } else {
-                    oddCount++;
-                    odd.innerHTML = oddCount;
-                }
+        if (Number(lastDigit) % 2 === 0) {
+            evenCount++;
+            even.innerHTML = evenCount;
+        } else {
+            oddCount++;
+            odd.innerHTML = oddCount;
+        }
 
-                signal.innerHTML = "Scanning...";
-            }
-        };
+        signal.innerHTML = "Scanning...";
+    }
+};
+        
 
-        ws.onclose = () => {
-            status.innerHTML = "Disconnected";
-        };
-
-        ws.onerror = () => {
-            status.innerHTML = "Error";
-        };
-
-    });
-
+            
 });
