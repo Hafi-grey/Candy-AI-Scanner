@@ -3,68 +3,62 @@ const tick = document.getElementById("tick");
 const even = document.getElementById("even");
 const odd = document.getElementById("odd");
 const signal = document.getElementById("signal");
+const connectBtn = document.getElementById("connectBtn");
 
 let evenCount = 0;
 let oddCount = 0;
+let ws = null;
+
+connectBtn.addEventListener("click", connect);
+
 function connect() {
-    alert("The button is working!");
-}
-    const ws = new WebSocket("wss://ws.derivws.com/websockets/v3?app_id=1089");
 
-    ws.onopen = function () {
+    if (ws) {
+        ws.close();
+    }
 
-        status.innerHTML = "Connected";
+    status.textContent = "Connecting...";
+
+    ws = new WebSocket("wss://ws.derivws.com/websockets/v3?app_id=1089");
+
+    ws.onopen = () => {
+        status.textContent = "Connected";
 
         ws.send(JSON.stringify({
             ticks: "R_100"
         }));
-
     };
 
-    ws.onmessage = function (msg) {
+    ws.onmessage = (event) => {
 
-        const data = JSON.parse(msg.data);
+        const data = JSON.parse(event.data);
 
-        if (data.tick) {
+        if (!data.tick) return;
 
-            let price = data.tick.quote;
+        const price = data.tick.quote;
 
-            tick.innerHTML = price;
+        tick.textContent = price;
 
-            let lastDigit = price.toString().slice(-1);
+        const lastDigit = Number(price.toString().slice(-1));
 
-            if (Number(lastDigit) % 2 === 0) {
-
-                evenCount++;
-
-                even.innerHTML = evenCount;
-
-                signal.innerHTML = "EVEN";
-
-                signal.style.color = "lime";
-
-            } else {
-
-                oddCount++;
-
-                odd.innerHTML = oddCount;
-
-                signal.innerHTML = "ODD";
-
-                signal.style.color = "orange";
-
-            }
-
+        if (lastDigit % 2 === 0) {
+            evenCount++;
+            even.textContent = evenCount;
+            signal.textContent = "EVEN";
+            signal.style.color = "#00ff99";
+        } else {
+            oddCount++;
+            odd.textContent = oddCount;
+            signal.textContent = "ODD";
+            signal.style.color = "#ff9900";
         }
-
     };
 
-    ws.onerror = function () {
-        status.innerHTML = "Connection Error";
+    ws.onerror = () => {
+        status.textContent = "Connection Error";
     };
 
-    ws.onclose = function () {
-        status.innerHTML = "Disconnected";
+    ws.onclose = () => {
+        status.textContent = "Disconnected";
     };
-
 }
