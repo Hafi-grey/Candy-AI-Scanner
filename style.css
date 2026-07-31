@@ -1,51 +1,66 @@
-body{
-    margin:0;
-    padding:0;
-    background:#111;
-    font-family:Arial,sans-serif;
-    color:white;
+body {
+    background: #111;
+    color: white;
+    font-family: Arial, sans-serif;
+    text-align: center;
+    margin: 0;
+    padding: 30px;
 }
 
-.container{
-    width:90%;
-    max-width:500px;
-    margin:40px auto;
-    text-align:center;
+h1 {
+    color: #00ff99;
+    font-size: 42px;
+    text-shadow: 0 0 15px #00ff99;
 }
 
-h1{
-    color:#00ff99;
-    margin-bottom:25px;
+.box {
+    max-width: 400px;
+    margin: auto;
+    background: #222;
+    padding: 25px;
+    border-radius: 20px;
+    box-shadow: 0 0 25px #00ff99;
 }
 
-.card{
-    background:#222;
-    border-radius:20px;
-    padding:25px;
-    box-shadow:0 0 20px #00ff99;
+p {
+    font-size: 18px;
+    margin: 18px 0;
 }
 
-p{
-    font-size:24px;
-    margin:20px 0;
+#status {
+    color: orange;
 }
 
-span{
-    font-weight:bold;
+#tick {
+    color: cyan;
+    font-weight: bold;
 }
 
-button{
-    margin-top:20px;
-    width:100%;
-    padding:15px;
-    border:none;
-    border-radius:12px;
-    background:#00cc66;
-    color:white;
-    font-size:22px;
-    cursor:pointer;
+#even {
+    color: lime;
+    font-weight: bold;
 }
 
-button:hover{
-    background:#00aa55;
+#odd {
+    color: orange;
+    font-weight: bold;
+}
+
+#signal {
+    font-size: 24px;
+    font-weight: bold;
+}
+
+button {
+    background: #00cc77;
+    color: white;
+    border: none;
+    padding: 15px 30px;
+    font-size: 18px;
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #00aa66;
 }
