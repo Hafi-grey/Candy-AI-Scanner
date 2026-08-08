@@ -4,153 +4,210 @@ const evenEl = document.getElementById("even");
 const oddEl = document.getElementById("odd");
 const signalEl = document.getElementById("signal");
 
-statusEl.textContent = "Starting scanner...";
+let ws = null;
+let evenCount = 0;
+let oddCount = 0;
+let previousPrice = null;
 
-const ws = new WebSocket(
-    "wss://ws.binaryws.com/websockets/v3"
-);
+const APP_ID = "1089";
 
-ws.onopen = function () {
+function setStatus(text) {
+    statusEl.textContent = text;
+}
 
-    statusEl.textContent = "CONNECTED 🟢";
+function connect() {
 
-    ws.send(JSON.stringify({
-        active_symbols: "brief",
-        req_id: 1
-    }));
-};
+    setStatus("Connecting...");
 
-ws.onmessage = function (event) {
+    ws = new WebSocket(
+        `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`
+    );
 
-    const data = JSON.parse(event.data);
+    ws.onopen = function () {
 
-    console.log(data);
+        setStatus("Connected 🟢");
 
-    if (data.error) {
-        statusEl.textContent =
-            "DERIV ERROR: " + data.error.message;
-        return;
-    }
+        ws.send(JSON.stringify({
+            active_symbols: "brief",
+            req_id: 1
+        }));
+    };
 
-    if (data.msg_type === "active_symbols") {
+    ws.onmessage = function (event) {
 
-        const markets = data.active_symbols || [];
+        const data = JSON.parse(event.data);
 
-        console.log("MARKETS:", markets);
+        console.log("DERIV:", data);
 
-        if (markets.length === 0) {
-            statusEl.textContent =
-                "Connected, but 0 markets returned";
+        if (data.error) {
+            setStatus("Error: " + data.error.message);
             return;
         }
 
-        // Find a Volatility Index using the CURRENT field name
-        const volatility = markets.filter(item => {
+        // Receive available markets
+        if (data.msg_type === "active_symbols") {
 
-            const type =
-                String(
-                    item.underlying_symbol_type || ""
-                ).toLowerCase();
+            const markets = data.active_symbols || [];
 
-            const name =
-                String(
-                    item.underlying_symbol_name || ""
-                ).toLowerCase();
+            console.log("TOTAL MARKETS:", markets.length);
 
-            return (
-                type.includes("volatility") ||
-                name.includes("volatility")
-            );
-        });
+            // Find synthetic/volatility markets
+            const synthetic = markets.filter(item => {
 
-        if (volatility.length > 0) {
+                const market =
+                    String(item.market || "").toLowerCase();
 
-            const market = volatility[0];
+                const type =
+                    String(
+                        item.underlying_symbol_type || ""
+                    ).toLowerCase();
 
-            const symbol =
-                market.underlying_symbol;
-
-            const name =
-                market.underlying_symbol_name;
-
-            statusEl.textContent =
-                "FOUND 🟢 " + name;
-
-            tickEl.textContent =
-                symbol;
+                return (
+                    market.includes("synthetic") ||
+                    type.includes("synthetic")
+                );
+            });
 
             console.log(
-                "VOLATILITY SYMBOL:",
-                symbol
+                "SYNTHETIC MARKETS:",
+                synthetic
             );
 
-            // Subscribe using the symbol returned by Deriv
+            if (synthetic.length === 0) {
+
+                setStatus(
+                    "Connected, but no synthetic markets found"
+                );
+
+                return;
+            }
+
+            // Prefer 1-second Volatility 100
+            let selected = synthetic.find(item =>
+                String(item.underlying_symbol || "")
+                    .includes("1HZ100V")
+            );
+
+            // Otherwise try Volatility 100
+            if (!selected) {
+                selected = synthetic.find(item =>
+                    String(item.underlying_symbol || "")
+                        .includes("R_100")
+                );
+            }
+
+            // Otherwise use the first available synthetic market
+            if (!selected) {
+                selected = synthetic[0];
+            }
+
+            const symbol =
+                selected.underlying_symbol;
+
+            const name =
+                selected.underlying_symbol_name ||
+                symbol;
+
+            console.log("SELECTED:", name, symbol);
+
+            setStatus(
+                "Market: " + name + " 🟢"
+            );
+
+            // Subscribe to the ACTUAL symbol returned by Deriv
             ws.send(JSON.stringify({
                 ticks: symbol,
                 subscribe: 1,
                 req_id: 2
             }));
 
-        } else {
-
-            statusEl.textContent =
-                "Connected 🟢 — No Volatility found";
-
-            console.log(
-                "First markets:",
-                markets.slice(0, 10)
-            );
+            return;
         }
-    }
 
-    if (data.msg_type === "tick") {
+        // Live tick
+        if (data.msg_type === "tick") {
 
-        const price =
-            Number(data.tick.quote);
+            const price =
+                Number(data.tick.quote);
 
-        tickEl.textContent = price;
+            if (!Number.isFinite(price)) {
+                return;
+            }
 
-        statusEl.textContent =
-            "LIVE TICK 🟢";
+            tickEl.textContent = price;
 
-        const text =
-            String(data.tick.quote);
+            // Get final digit
+            const text =
+                String(data.tick.quote);
 
-        const digits =
-            text.replace(/\D/g, "");
+            const digits =
+                text.replace(/\D/g, "");
 
-        if (digits.length > 0) {
+            if (digits.length > 0) {
 
-            const last =
-                Number(
-                    digits[digits.length - 1]
-                );
+                const lastDigit =
+                    Number(
+                        digits[digits.length - 1]
+                    );
 
-            if (last % 2 === 0) {
+                if (lastDigit % 2 === 0) {
+                    evenCount++;
+                } else {
+                    oddCount++;
+                }
 
                 evenEl.textContent =
-                    Number(evenEl.textContent) + 1;
-
-            } else {
+                    evenCount;
 
                 oddEl.textContent =
-                    Number(oddEl.textContent) + 1;
+                    oddCount;
             }
+
+            previousPrice = price;
+
+            updateSignal();
         }
+    };
+
+    ws.onerror = function () {
+
+        setStatus("WebSocket Error 🔴");
+    };
+
+    ws.onclose = function () {
+
+        setStatus("WebSocket Closed 🔴");
+    };
+}
+
+function updateSignal() {
+
+    const total =
+        evenCount + oddCount;
+
+    if (total < 10) {
 
         signalEl.textContent =
-            "RECEIVING DATA...";
+            "WAITING...";
+
+        return;
     }
-};
 
-ws.onerror = function () {
+    if (evenCount > oddCount) {
 
-    statusEl.textContent =
-        "WebSocket ERROR 🔴";
-};
+        signalEl.textContent =
+            "EVEN";
 
-ws.onclose = function () {
+    } else if (oddCount > evenCount) {
 
-    statusEl.textContent =
-        "WebSocket CLOSED 🔴";
-};
+        signalEl.textContent =
+            "ODD";
+
+    } else {
+
+        signalEl.textContent =
+            "WAIT";
+    }
+}
+
+connect();
