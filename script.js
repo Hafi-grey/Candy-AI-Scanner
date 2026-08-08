@@ -1,5 +1,4 @@
-// Candy AI Scanner - Version 1
-// Live Deriv tick scanner
+// Candy AI Scanner - Live Deriv Connection
 
 const statusEl = document.getElementById("status");
 const tickEl = document.getElementById("tick");
@@ -9,24 +8,12 @@ const signalEl = document.getElementById("signal");
 
 let ws;
 let previousPrice = null;
-
 let evenCount = 0;
 let oddCount = 0;
-let overCount = 0;
-let underCount = 0;
-let upCount = 0;
-let downCount = 0;
 
-// Deriv market
-const SYMBOL = "R_100";
 const APP_ID = "1089";
 
-function setStatus(message) {
-    if (statusEl) {
-        statusEl.textContent = message;
-    }
-}
-
+// Start connection
 function connect() {
 
     setStatus("Connecting...");
@@ -35,100 +22,142 @@ function connect() {
         `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`
     );
 
-    ws.onopen = function () {
+    ws.onopen = () => {
 
         setStatus("Connected 🟢");
 
-        // Subscribe to live R_100 ticks
+        // Ask Deriv for currently active markets
         ws.send(JSON.stringify({
-            ticks: SYMBOL,
-            subscribe: 1
+            active_symbols: "brief"
         }));
     };
 
-    ws.onmessage = function (event) {
+    ws.onmessage = (event) => {
 
-        try {
+        const data = JSON.parse(event.data);
 
-            const data = JSON.parse(event.data);
+        console.log("Deriv:", data);
 
-            if (data.error) {
-                console.log("Deriv error:", data.error.message);
-                setStatus("Error: " + data.error.message);
+        // Error
+        if (data.error) {
+
+            setStatus("Error: " + data.error.message);
+
+            console.log("Deriv error:", data.error);
+
+            return;
+        }
+
+        // Active symbols received
+        if (data.msg_type === "active_symbols") {
+
+            const symbols = data.active_symbols || [];
+
+            console.log("Available symbols:", symbols);
+
+            // Look for Volatility 100 first
+            let selected = symbols.find(
+                s =>
+                    s.underlying_symbol === "R_100" ||
+                    s.symbol === "R_100"
+            );
+
+            // If R_100 isn't available, try R_50
+            if (!selected) {
+
+                selected = symbols.find(
+                    s =>
+                        s.underlying_symbol === "R_50" ||
+                        s.symbol === "R_50"
+                );
+            }
+
+            // If still not available, choose a synthetic symbol
+            if (!selected) {
+
+                selected = symbols.find(
+                    s =>
+                        String(
+                            s.underlying_symbol || s.symbol || ""
+                        ).startsWith("R_")
+                );
+            }
+
+            if (!selected) {
+
+                setStatus("No Volatility Index found");
+
                 return;
             }
 
-            if (data.tick) {
+            const symbol =
+                selected.underlying_symbol || selected.symbol;
 
-                const price = Number(data.tick.quote);
+            console.log("Selected market:", symbol);
 
-                if (!Number.isFinite(price)) {
-                    return;
-                }
+            setStatus("Market: " + symbol);
 
-                // Display live price
-                if (tickEl) {
-                    tickEl.textContent = price;
-                }
+            // Subscribe to live ticks
+            ws.send(JSON.stringify({
+                ticks: symbol,
+                subscribe: 1
+            }));
 
-                // Get last digit
-                const priceString = String(data.tick.quote);
-                const digitsOnly = priceString.replace(/\D/g, "");
-                const lastDigit =
-                    Number(digitsOnly.charAt(digitsOnly.length - 1));
+            return;
+        }
 
-                // EVEN / ODD
-                if (lastDigit % 2 === 0) {
-                    evenCount++;
-                } else {
-                    oddCount++;
-                }
+        // Live tick received
+        if (data.msg_type === "tick" && data.tick) {
 
-                if (evenEl) {
-                    evenEl.textContent = evenCount;
-                }
+            const price = Number(data.tick.quote);
 
-                if (oddEl) {
-                    oddEl.textContent = oddCount;
-                }
-
-                // OVER / UNDER 5
-                if (lastDigit > 5) {
-                    overCount++;
-                } else {
-                    underCount++;
-                }
-
-                // UP / DOWN
-                if (previousPrice !== null) {
-
-                    if (price > previousPrice) {
-                        upCount++;
-                    } else if (price < previousPrice) {
-                        downCount++;
-                    }
-                }
-
-                previousPrice = price;
-
-                // Basic scanner signal
-                updateSignal();
+            if (!Number.isFinite(price)) {
+                return;
             }
 
-        } catch (error) {
-            console.log("Message error:", error);
+            // Display price
+            tickEl.textContent = price;
+
+            // Find last digit
+            const priceText = String(data.tick.quote);
+            const digits = priceText.replace(/\D/g, "");
+
+            if (!digits.length) {
+                return;
+            }
+
+            const lastDigit =
+                Number(digits[digits.length - 1]);
+
+            // Even / Odd
+            if (lastDigit % 2 === 0) {
+
+                evenCount++;
+
+            } else {
+
+                oddCount++;
+            }
+
+            evenEl.textContent = evenCount;
+            oddEl.textContent = oddCount;
+
+            // Simple first signal
+            updateSignal();
+
+            previousPrice = price;
         }
     };
 
-    ws.onerror = function () {
-        setStatus("Connection error 🔴");
+    ws.onerror = () => {
+
+        setStatus("WebSocket Error 🔴");
     };
 
-    ws.onclose = function () {
+    ws.onclose = () => {
 
         setStatus("Disconnected 🔴");
 
-        // Try reconnecting after 3 seconds
         setTimeout(connect, 3000);
     };
 }
@@ -136,43 +165,38 @@ function connect() {
 
 function updateSignal() {
 
-    const totalDigits = evenCount + oddCount;
+    const total =
+        evenCount + oddCount;
 
-    if (totalDigits < 5) {
+    if (total < 10) {
 
-        if (signalEl) {
-            signalEl.textContent = "WAITING...";
-        }
+        signalEl.textContent = "WAITING...";
 
         return;
     }
 
-    const totalDirection = upCount + downCount;
+    if (evenCount > oddCount) {
 
-    let signal = "WAIT";
+        signalEl.textContent = "EVEN";
 
-    // Digit signal
-    if (overCount > underCount) {
-        signal = "OVER";
-    } else if (underCount > overCount) {
-        signal = "UNDER";
-    }
+    } else if (oddCount > evenCount) {
 
-    // Direction signal
-    if (totalDirection >= 5) {
+        signalEl.textContent = "ODD";
 
-        if (upCount > downCount) {
-            signal += " / UP";
-        } else if (downCount > upCount) {
-            signal += " / DOWN";
-        }
-    }
+    } else {
 
-    if (signalEl) {
-        signalEl.textContent = signal;
+        signalEl.textContent = "WAIT";
     }
 }
 
 
-// Start scanner
+function setStatus(message) {
+
+    if (statusEl) {
+        statusEl.textContent = message;
+    }
+}
+
+
+// Start
 connect();
