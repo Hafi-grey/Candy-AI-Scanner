@@ -15,39 +15,64 @@ let previousPrice = null;
 
 const SYMBOL = "1HZ100V";
 
+function setStatus(message) {
+    statusEl.textContent = message;
+}
+
 function connect() {
 
     setStatus("Connecting...");
 
+    // Current public Deriv market-data endpoint
     ws = new WebSocket(
-        "wss://ws.derivws.com/websockets/v3?app_id=1089"
+        "wss://ws.binaryws.com/websockets/v3"
     );
 
     ws.onopen = function () {
 
         setStatus("Connected 🟢");
 
+        // Ask Deriv for available markets
         ws.send(JSON.stringify({
-            ticks: SYMBOL,
-            subscribe: 1
+            active_symbols: "brief",
+            product_type: "basic",
+            req_id: 1
         }));
 
-        console.log("Subscribed to:", SYMBOL);
+        // Subscribe to Volatility 100 1s
+        ws.send(JSON.stringify({
+            ticks: SYMBOL,
+            subscribe: 1,
+            req_id: 2
+        }));
     };
 
     ws.onmessage = function (event) {
 
         const data = JSON.parse(event.data);
 
-        console.log(data);
+        console.log("DERIV:", data);
 
         if (data.error) {
-
             setStatus("Error: " + data.error.message);
-
             return;
         }
 
+        // Show that the market exists
+        if (data.msg_type === "active_symbols") {
+
+            const found = data.active_symbols.some(
+                item => item.symbol === SYMBOL
+            );
+
+            if (found) {
+                setStatus("Market found 🟢");
+            } else {
+                setStatus("Market not available");
+            }
+        }
+
+        // Live tick
         if (data.msg_type === "tick") {
 
             const price = Number(data.tick.quote);
@@ -56,10 +81,10 @@ function connect() {
                 return;
             }
 
-            // Show live price
+            // Display price
             tickEl.textContent = price;
 
-            // Last digit
+            // Get last digit
             const priceText = String(data.tick.quote);
             const digits = priceText.replace(/\D/g, "");
 
@@ -68,13 +93,9 @@ function connect() {
                 const lastDigit =
                     Number(digits[digits.length - 1]);
 
-                // EVEN / ODD
                 if (lastDigit % 2 === 0) {
-
                     evenCount++;
-
                 } else {
-
                     oddCount++;
                 }
 
@@ -86,11 +107,10 @@ function connect() {
             if (previousPrice !== null) {
 
                 if (price > previousPrice) {
-
                     upCount++;
+                }
 
-                } else if (price < previousPrice) {
-
+                if (price < previousPrice) {
                     downCount++;
                 }
             }
@@ -102,16 +122,13 @@ function connect() {
     };
 
     ws.onerror = function () {
-
-        setStatus("WebSocket Error 🔴");
+        setStatus("WebSocket error 🔴");
     };
 
     ws.onclose = function () {
-
         setStatus("Disconnected 🔴");
     };
 }
-
 
 function updateSignal() {
 
@@ -119,33 +136,19 @@ function updateSignal() {
         evenCount + oddCount;
 
     if (total < 10) {
-
         signalEl.textContent = "WAITING...";
-
         return;
     }
 
     if (evenCount > oddCount) {
-
         signalEl.textContent = "EVEN";
-
-    } else if (oddCount > evenCount) {
-
+    }
+    else if (oddCount > evenCount) {
         signalEl.textContent = "ODD";
-
-    } else {
-
+    }
+    else {
         signalEl.textContent = "WAIT";
     }
 }
-
-
-function setStatus(message) {
-
-    if (statusEl) {
-        statusEl.textContent = message;
-    }
-}
-
 
 connect();
