@@ -4,26 +4,19 @@ const evenEl = document.getElementById("even");
 const oddEl = document.getElementById("odd");
 const signalEl = document.getElementById("signal");
 
-let ws = null;
-
+let ws;
 let evenCount = 0;
 let oddCount = 0;
-let upCount = 0;
-let downCount = 0;
-
 let previousPrice = null;
 
-const SYMBOL = "1HZ100V";
-
-function setStatus(message) {
-    statusEl.textContent = message;
+function setStatus(text) {
+    statusEl.textContent = text;
 }
 
 function connect() {
 
     setStatus("Connecting...");
 
-    // Current public Deriv market-data endpoint
     ws = new WebSocket(
         "wss://ws.binaryws.com/websockets/v3"
     );
@@ -32,18 +25,10 @@ function connect() {
 
         setStatus("Connected 🟢");
 
-        // Ask Deriv for available markets
+        // Ask Deriv for the CURRENT available symbols
         ws.send(JSON.stringify({
             active_symbols: "brief",
-            product_type: "basic",
             req_id: 1
-        }));
-
-        // Subscribe to Volatility 100 1s
-        ws.send(JSON.stringify({
-            ticks: SYMBOL,
-            subscribe: 1,
-            req_id: 2
         }));
     };
 
@@ -51,47 +36,122 @@ function connect() {
 
         const data = JSON.parse(event.data);
 
-        console.log("DERIV:", data);
+        console.log("DERIV DATA:", data);
 
         if (data.error) {
             setStatus("Error: " + data.error.message);
             return;
         }
 
-        // Show that the market exists
+        // Receive active symbols
         if (data.msg_type === "active_symbols") {
 
-            const found = data.active_symbols.some(
-                item => item.symbol === SYMBOL
+            const symbols = data.active_symbols || [];
+
+            console.log("TOTAL SYMBOLS:", symbols.length);
+
+            // Show the first few symbols in console
+            console.log(symbols.slice(0, 20));
+
+            // Look for 1-second Volatility indices
+            let market = symbols.find(
+                item =>
+                    String(item.underlying_symbol || "")
+                    .includes("1HZ100V")
             );
 
-            if (found) {
-                setStatus("Market found 🟢");
-            } else {
-                setStatus("Market not available");
+            if (!market) {
+                market = symbols.find(
+                    item =>
+                        String(item.underlying_symbol || "")
+                        .includes("1HZ75V")
+                );
             }
+
+            if (!market) {
+                market = symbols.find(
+                    item =>
+                        String(item.underlying_symbol || "")
+                        .includes("1HZ50V")
+                );
+            }
+
+            if (!market) {
+                market = symbols.find(
+                    item =>
+                        String(item.underlying_symbol || "")
+                        .includes("R_100")
+                );
+            }
+
+            if (!market) {
+                market = symbols.find(
+                    item =>
+                        String(item.underlying_symbol || "")
+                        .includes("R_75")
+                );
+            }
+
+            if (!market) {
+                setStatus(
+                    "No supported Volatility Index found"
+                );
+
+                console.log(
+                    "Available symbols:",
+                    symbols
+                );
+
+                return;
+            }
+
+            const symbol =
+                market.underlying_symbol;
+
+            console.log(
+                "SELECTED SYMBOL:",
+                symbol
+            );
+
+            setStatus(
+                "Market: " + symbol + " 🟢"
+            );
+
+            // NOW subscribe using the symbol Deriv actually returned
+            ws.send(JSON.stringify({
+                ticks: symbol,
+                subscribe: 1,
+                req_id: 2
+            }));
+
+            return;
         }
 
         // Live tick
         if (data.msg_type === "tick") {
 
-            const price = Number(data.tick.quote);
+            const price =
+                Number(data.tick.quote);
 
             if (!Number.isFinite(price)) {
                 return;
             }
 
-            // Display price
             tickEl.textContent = price;
 
-            // Get last digit
-            const priceText = String(data.tick.quote);
-            const digits = priceText.replace(/\D/g, "");
+            // Last digit
+            const text =
+                String(data.tick.quote);
+
+            const digits =
+                text.replace(/\D/g, "");
 
             if (digits.length > 0) {
 
                 const lastDigit =
-                    Number(digits[digits.length - 1]);
+                    Number(
+                        digits[digits.length - 1]
+                    );
 
                 if (lastDigit % 2 === 0) {
                     evenCount++;
@@ -99,20 +159,11 @@ function connect() {
                     oddCount++;
                 }
 
-                evenEl.textContent = evenCount;
-                oddEl.textContent = oddCount;
-            }
+                evenEl.textContent =
+                    evenCount;
 
-            // UP / DOWN
-            if (previousPrice !== null) {
-
-                if (price > previousPrice) {
-                    upCount++;
-                }
-
-                if (price < previousPrice) {
-                    downCount++;
-                }
+                oddEl.textContent =
+                    oddCount;
             }
 
             previousPrice = price;
@@ -122,7 +173,7 @@ function connect() {
     };
 
     ws.onerror = function () {
-        setStatus("WebSocket error 🔴");
+        setStatus("WebSocket Error 🔴");
     };
 
     ws.onclose = function () {
@@ -136,7 +187,8 @@ function updateSignal() {
         evenCount + oddCount;
 
     if (total < 10) {
-        signalEl.textContent = "WAITING...";
+        signalEl.textContent =
+            "WAITING...";
         return;
     }
 
