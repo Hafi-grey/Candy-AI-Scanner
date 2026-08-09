@@ -1,28 +1,23 @@
 const status = document.getElementById("status");
-alert("New scanner fields found!");
 const tick = document.getElementById("tick");
 const even = document.getElementById("even");
 const odd = document.getElementById("odd");
 const signal = document.getElementById("signal");
 
-const digits = document.getElementById("digits");
-const confidence = document.getElementById("confidence");
-const strength = document.getElementById("strength");
+const digitsBox = document.getElementById("digits");
+const confidenceBox = document.getElementById("confidence");
+const strengthBox = document.getElementById("strength");
 
 const button = document.getElementById("connectBtn");
 
 let ws = null;
 let evenCount = 0;
 let oddCount = 0;
-let digitHistory = [];
+let history = [];
 
 const HISTORY_SIZE = 20;
 
-button.addEventListener("click", () => {
-
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        return;
-    }
+button.addEventListener("click", function () {
 
     status.textContent = "Connecting...";
 
@@ -30,7 +25,7 @@ button.addEventListener("click", () => {
         "wss://api.derivws.com/trading/v1/options/ws/public"
     );
 
-    ws.onopen = () => {
+    ws.onopen = function () {
 
         status.textContent = "Connected 🟢";
 
@@ -40,11 +35,9 @@ button.addEventListener("click", () => {
         }));
     };
 
-    ws.onmessage = (event) => {
+    ws.onmessage = function (event) {
 
         const data = JSON.parse(event.data);
-
-        console.log(data);
 
         if (data.error) {
             status.textContent =
@@ -60,66 +53,62 @@ button.addEventListener("click", () => {
 
         tick.textContent = price;
 
-        // Get the final digit of the quote
+        // Get last digit
         const lastDigit = Number(
             String(price)
                 .replace(".", "")
                 .slice(-1)
         );
 
-        // Save digit
-        digitHistory.push(lastDigit);
+        // Add digit to history
+        history.push(lastDigit);
 
-        if (digitHistory.length > HISTORY_SIZE) {
-            digitHistory.shift();
+        if (history.length > HISTORY_SIZE) {
+            history.shift();
         }
 
-        // Count Even / Odd
+        // Count overall Even / Odd
         if (lastDigit % 2 === 0) {
-
             evenCount++;
             even.textContent = evenCount;
-
         } else {
-
             oddCount++;
             odd.textContent = oddCount;
         }
 
         status.textContent = "LIVE TICK 🟢";
 
-        // Show recent digits
-        digits.textContent =
-            digitHistory.join(" ");
+        // Show recent digits immediately
+        digitsBox.textContent = history.join(" ");
 
-        // Wait for enough data
-        if (digitHistory.length < HISTORY_SIZE) {
+        // Wait until we have 20 digits
+        if (history.length < HISTORY_SIZE) {
 
-            signal.textContent =
-                "Collecting...";
+            signal.textContent = "Collecting...";
 
-            confidence.textContent =
-                "0%";
+            confidenceBox.textContent =
+                Math.round(
+                    (history.length / HISTORY_SIZE) * 100
+                ) + "%";
 
-            strength.textContent =
-                "Waiting";
+            strengthBox.textContent =
+                "Collecting";
 
             return;
         }
 
-        // Analyse the last 20 digits
+        // Count Even / Odd in last 20 digits
         let recentEven = 0;
         let recentOdd = 0;
 
-        digitHistory.forEach((digit) => {
+        for (let i = 0; i < history.length; i++) {
 
-            if (digit % 2 === 0) {
+            if (history[i] % 2 === 0) {
                 recentEven++;
             } else {
                 recentOdd++;
             }
-
-        });
+        }
 
         const evenPercent =
             (recentEven / HISTORY_SIZE) * 100;
@@ -127,59 +116,60 @@ button.addEventListener("click", () => {
         const oddPercent =
             (recentOdd / HISTORY_SIZE) * 100;
 
-        let selectedSignal;
-        let selectedConfidence;
-
+        // Determine signal
         if (recentEven > recentOdd) {
 
-            selectedSignal = "EVEN";
-            selectedConfidence = evenPercent;
+            signal.textContent = "EVEN";
+
+            confidenceBox.textContent =
+                Math.round(evenPercent) + "%";
 
         } else if (recentOdd > recentEven) {
 
-            selectedSignal = "ODD";
-            selectedConfidence = oddPercent;
+            signal.textContent = "ODD";
+
+            confidenceBox.textContent =
+                Math.round(oddPercent) + "%";
 
         } else {
 
-            selectedSignal = "WAIT";
-            selectedConfidence = 50;
+            signal.textContent = "WAIT";
+
+            confidenceBox.textContent = "50%";
         }
 
+        // Determine strength
         const difference =
             Math.abs(evenPercent - oddPercent);
 
-        let selectedStrength;
-
         if (difference >= 30) {
-            selectedStrength = "STRONG";
+
+            strengthBox.textContent = "STRONG";
+
         } else if (difference >= 20) {
-            selectedStrength = "MEDIUM";
+
+            strengthBox.textContent = "MEDIUM";
+
         } else if (difference >= 10) {
-            selectedStrength = "WEAK";
+
+            strengthBox.textContent = "WEAK";
+
         } else {
-            selectedStrength = "BALANCED";
+
+            strengthBox.textContent = "BALANCED";
         }
-
-        signal.textContent =
-            selectedSignal;
-
-        confidence.textContent =
-            selectedConfidence.toFixed(0) + "%";
-
-        strength.textContent =
-            selectedStrength;
     };
 
-    ws.onerror = () => {
+    ws.onerror = function () {
 
         status.textContent =
             "WebSocket error 🔴";
     };
 
-    ws.onclose = () => {
+    ws.onclose = function () {
 
         status.textContent =
             "Disconnected 🔴";
     };
+
 });
