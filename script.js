@@ -5,19 +5,19 @@ const odd = document.getElementById("odd");
 const signal = document.getElementById("signal");
 const button = document.getElementById("connectBtn");
 
+let ws;
 let evenCount = 0;
 let oddCount = 0;
-let ws = null;
 
-button.addEventListener("click", function () {
+button.addEventListener("click", () => {
 
     status.textContent = "Connecting...";
 
     ws = new WebSocket(
-        "wss://ws.derivws.com/websockets/v3?app_id=1089"
+        "wss://api.derivws.com/trading/v1/options/ws/public"
     );
 
-    ws.onopen = function () {
+    ws.onopen = () => {
 
         status.textContent = "Connected 🟢";
 
@@ -27,15 +27,14 @@ button.addEventListener("click", function () {
         }));
     };
 
-    ws.onmessage = function (event) {
+    ws.onmessage = (event) => {
 
         const data = JSON.parse(event.data);
 
         console.log(data);
 
         if (data.error) {
-            status.textContent =
-                "ERROR: " + data.error.message;
+            status.textContent = "ERROR: " + data.error.message;
             return;
         }
 
@@ -45,37 +44,28 @@ button.addEventListener("click", function () {
 
             tick.textContent = price;
 
-            const lastDigit = String(price)
-                .replace(".", "")
-                .slice(-1);
+            const digits = String(price).replace(".", "");
+            const lastDigit = Number(digits.slice(-1));
 
-            if (Number(lastDigit) % 2 === 0) {
-
+            if (lastDigit % 2 === 0) {
                 evenCount++;
                 even.textContent = evenCount;
-
             } else {
-
                 oddCount++;
                 odd.textContent = oddCount;
             }
 
             status.textContent = "LIVE TICK 🟢";
-
             signal.textContent = "Scanning...";
         }
     };
 
-    ws.onerror = function () {
-
-        status.textContent =
-            "WebSocket error 🔴";
+    ws.onerror = () => {
+        status.textContent = "WebSocket error 🔴";
     };
 
-    ws.onclose = function () {
-
-        status.textContent =
-            "Disconnected 🔴";
+    ws.onclose = () => {
+        status.textContent = "Disconnected 🔴";
     };
 
 });
