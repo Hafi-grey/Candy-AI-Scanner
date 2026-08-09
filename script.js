@@ -1,4 +1,4 @@
-const status = document.getElementById("strength");
+const status = document.getElementById("status");
 alert("New scanner fields found!");
 const tick = document.getElementById("tick");
 const even = document.getElementById("even");
