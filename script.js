@@ -3,9 +3,14 @@ const tick = document.getElementById("tick");
 const even = document.getElementById("even");
 const odd = document.getElementById("odd");
 const signal = document.getElementById("signal");
+
+const digits = document.getElementById("digits");
+const confidence = document.getElementById("confidence");
+const strength = document.getElementById("strength");
+
 const button = document.getElementById("connectBtn");
 
-let ws;
+let ws = null;
 let evenCount = 0;
 let oddCount = 0;
 let digitHistory = [];
@@ -54,7 +59,7 @@ button.addEventListener("click", () => {
 
         tick.textContent = price;
 
-        // Get last digit
+        // Get the final digit of the quote
         const lastDigit = Number(
             String(price)
                 .replace(".", "")
@@ -68,29 +73,40 @@ button.addEventListener("click", () => {
             digitHistory.shift();
         }
 
-        // Overall counters
+        // Count Even / Odd
         if (lastDigit % 2 === 0) {
+
             evenCount++;
             even.textContent = evenCount;
+
         } else {
+
             oddCount++;
             odd.textContent = oddCount;
         }
 
         status.textContent = "LIVE TICK 🟢";
 
-        // Wait until 20 digits are collected
+        // Show recent digits
+        digits.textContent =
+            digitHistory.join(" ");
+
+        // Wait for enough data
         if (digitHistory.length < HISTORY_SIZE) {
 
             signal.textContent =
-                "Collecting " +
-                digitHistory.length +
-                "/20";
+                "Collecting...";
+
+            confidence.textContent =
+                "0%";
+
+            strength.textContent =
+                "Waiting";
 
             return;
         }
 
-        // Analyse last 20 digits
+        // Analyse the last 20 digits
         let recentEven = 0;
         let recentOdd = 0;
 
@@ -110,48 +126,48 @@ button.addEventListener("click", () => {
         const oddPercent =
             (recentOdd / HISTORY_SIZE) * 100;
 
-        // Difference between Even and Odd
-        const difference =
-            Math.abs(evenPercent - oddPercent);
-
-        let result;
+        let selectedSignal;
+        let selectedConfidence;
 
         if (recentEven > recentOdd) {
 
-            result =
-                "EVEN • " +
-                evenPercent.toFixed(0) +
-                "%";
+            selectedSignal = "EVEN";
+            selectedConfidence = evenPercent;
 
         } else if (recentOdd > recentEven) {
 
-            result =
-                "ODD • " +
-                oddPercent.toFixed(0) +
-                "%";
+            selectedSignal = "ODD";
+            selectedConfidence = oddPercent;
 
         } else {
 
-            result = "WAIT • 50/50";
+            selectedSignal = "WAIT";
+            selectedConfidence = 50;
         }
 
-        // Strength
-        let strength;
+        const difference =
+            Math.abs(evenPercent - oddPercent);
+
+        let selectedStrength;
 
         if (difference >= 30) {
-            strength = "STRONG";
+            selectedStrength = "STRONG";
         } else if (difference >= 20) {
-            strength = "MEDIUM";
+            selectedStrength = "MEDIUM";
         } else if (difference >= 10) {
-            strength = "WEAK";
+            selectedStrength = "WEAK";
         } else {
-            strength = "BALANCED";
+            selectedStrength = "BALANCED";
         }
 
         signal.textContent =
-            result +
-            " • " +
-            strength;
+            selectedSignal;
+
+        confidence.textContent =
+            selectedConfidence.toFixed(0) + "%";
+
+        strength.textContent =
+            selectedStrength;
     };
 
     ws.onerror = () => {
