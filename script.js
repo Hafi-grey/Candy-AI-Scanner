@@ -12,7 +12,7 @@ ws.onopen = function () {
     status.textContent = "Connected 🟢";
 
     ws.send(JSON.stringify({
-        ticks: "R_100",
+        ticks: "R_100"
         subscribe: 1
     }));
 };
