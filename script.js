@@ -8,8 +8,15 @@ const button = document.getElementById("connectBtn");
 let ws;
 let evenCount = 0;
 let oddCount = 0;
+let digitHistory = [];
+
+const MAX_HISTORY = 20;
 
 button.addEventListener("click", () => {
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        return;
+    }
 
     status.textContent = "Connecting...";
 
@@ -34,38 +41,114 @@ button.addEventListener("click", () => {
         console.log(data);
 
         if (data.error) {
-            status.textContent = "ERROR: " + data.error.message;
+            status.textContent =
+                "ERROR: " + data.error.message;
             return;
         }
 
-        if (data.tick) {
+        if (!data.tick) {
+            return;
+        }
 
-            const price = data.tick.quote;
+        const price = data.tick.quote;
 
-            tick.textContent = price;
+        tick.textContent = price;
 
-            const digits = String(price).replace(".", "");
-            const lastDigit = Number(digits.slice(-1));
+        // Get the last digit of the price
+        const lastDigit = Number(
+            String(price)
+                .replace(".", "")
+                .slice(-1)
+        );
 
-            if (lastDigit % 2 === 0) {
-                evenCount++;
-                even.textContent = evenCount;
+        // Store digit
+        digitHistory.push(lastDigit);
+
+        if (digitHistory.length > MAX_HISTORY) {
+            digitHistory.shift();
+        }
+
+        // Count Even / Odd
+        if (lastDigit % 2 === 0) {
+
+            evenCount++;
+            even.textContent = evenCount;
+
+        } else {
+
+            oddCount++;
+            odd.textContent = oddCount;
+        }
+
+        status.textContent = "LIVE TICK 🟢";
+
+        // Need enough data before giving a signal
+        if (digitHistory.length < 10) {
+
+            signal.textContent =
+                "Collecting data... " +
+                digitHistory.length +
+                "/10";
+
+            return;
+        }
+
+        // Analyse the last 10 digits
+        const recentDigits =
+            digitHistory.slice(-10);
+
+        let recentEven = 0;
+        let recentOdd = 0;
+
+        recentDigits.forEach((digit) => {
+
+            if (digit % 2 === 0) {
+                recentEven++;
             } else {
-                oddCount++;
-                odd.textContent = oddCount;
+                recentOdd++;
             }
 
-            status.textContent = "LIVE TICK 🟢";
-            signal.textContent = "Scanning...";
+        });
+
+        const total = recentEven + recentOdd;
+
+        const evenProbability =
+            (recentEven / total) * 100;
+
+        const oddProbability =
+            (recentOdd / total) * 100;
+
+        // Only signal when there is a difference
+        if (recentEven > recentOdd) {
+
+            signal.textContent =
+                "EVEN • " +
+                evenProbability.toFixed(0) +
+                "%";
+
+        } else if (recentOdd > recentEven) {
+
+            signal.textContent =
+                "ODD • " +
+                oddProbability.toFixed(0) +
+                "%";
+
+        } else {
+
+            signal.textContent =
+                "WAIT • 50/50";
         }
     };
 
     ws.onerror = () => {
-        status.textContent = "WebSocket error 🔴";
+
+        status.textContent =
+            "WebSocket error 🔴";
     };
 
     ws.onclose = () => {
-        status.textContent = "Disconnected 🔴";
-    };
 
+        status.textContent =
+            "Disconnected 🔴";
+    };
 });
