@@ -10,7 +10,7 @@ let evenCount = 0;
 let oddCount = 0;
 let digitHistory = [];
 
-const MAX_HISTORY = 20;
+const HISTORY_SIZE = 20;
 
 button.addEventListener("click", () => {
 
@@ -54,53 +54,47 @@ button.addEventListener("click", () => {
 
         tick.textContent = price;
 
-        // Get the last digit of the price
+        // Get last digit
         const lastDigit = Number(
             String(price)
                 .replace(".", "")
                 .slice(-1)
         );
 
-        // Store digit
+        // Save digit
         digitHistory.push(lastDigit);
 
-        if (digitHistory.length > MAX_HISTORY) {
+        if (digitHistory.length > HISTORY_SIZE) {
             digitHistory.shift();
         }
 
-        // Count Even / Odd
+        // Overall counters
         if (lastDigit % 2 === 0) {
-
             evenCount++;
             even.textContent = evenCount;
-
         } else {
-
             oddCount++;
             odd.textContent = oddCount;
         }
 
         status.textContent = "LIVE TICK 🟢";
 
-        // Need enough data before giving a signal
-        if (digitHistory.length < 10) {
+        // Wait until 20 digits are collected
+        if (digitHistory.length < HISTORY_SIZE) {
 
             signal.textContent =
-                "Collecting data... " +
+                "Collecting " +
                 digitHistory.length +
-                "/10";
+                "/20";
 
             return;
         }
 
-        // Analyse the last 10 digits
-        const recentDigits =
-            digitHistory.slice(-10);
-
+        // Analyse last 20 digits
         let recentEven = 0;
         let recentOdd = 0;
 
-        recentDigits.forEach((digit) => {
+        digitHistory.forEach((digit) => {
 
             if (digit % 2 === 0) {
                 recentEven++;
@@ -110,34 +104,54 @@ button.addEventListener("click", () => {
 
         });
 
-        const total = recentEven + recentOdd;
+        const evenPercent =
+            (recentEven / HISTORY_SIZE) * 100;
 
-        const evenProbability =
-            (recentEven / total) * 100;
+        const oddPercent =
+            (recentOdd / HISTORY_SIZE) * 100;
 
-        const oddProbability =
-            (recentOdd / total) * 100;
+        // Difference between Even and Odd
+        const difference =
+            Math.abs(evenPercent - oddPercent);
 
-        // Only signal when there is a difference
+        let result;
+
         if (recentEven > recentOdd) {
 
-            signal.textContent =
+            result =
                 "EVEN • " +
-                evenProbability.toFixed(0) +
+                evenPercent.toFixed(0) +
                 "%";
 
         } else if (recentOdd > recentEven) {
 
-            signal.textContent =
+            result =
                 "ODD • " +
-                oddProbability.toFixed(0) +
+                oddPercent.toFixed(0) +
                 "%";
 
         } else {
 
-            signal.textContent =
-                "WAIT • 50/50";
+            result = "WAIT • 50/50";
         }
+
+        // Strength
+        let strength;
+
+        if (difference >= 30) {
+            strength = "STRONG";
+        } else if (difference >= 20) {
+            strength = "MEDIUM";
+        } else if (difference >= 10) {
+            strength = "WEAK";
+        } else {
+            strength = "BALANCED";
+        }
+
+        signal.textContent =
+            result +
+            " • " +
+            strength;
     };
 
     ws.onerror = () => {
