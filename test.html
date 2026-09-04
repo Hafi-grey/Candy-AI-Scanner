@@ -1,51 +1,18 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <title>Deriv Connection Test</title>
-
-  <style>
-    body {
-      font-family: Arial;
-      text-align: center;
-      padding: 30px;
-    }
-
-    h1 {
-      font-size: 25px;
-    }
-
-    #status {
-      font-weight: bold;
-    }
-
-    #price {
-      font-size: 30px;
-      font-weight: bold;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deriv Test</title>
 </head>
 
 <body>
 
-  <h1>Deriv Connection Test</h1>
+<h2>Deriv Connection Test</h2>
 
-  <p>
-    Status:
-    <span id="status">Connecting...</span>
-  </p>
-
-  <p>
-    Live Price:
-    <span id="price">Waiting...</span>
-  </p>
-
-  <p>
-    Message:
-    <span id="message">Waiting...</span>
-  </p>
+<p>Status: <span id="status">Connecting...</span></p>
+<p>Price: <span id="price">Waiting...</span></p>
+<p>Message: <span id="message">Waiting...</span></p>
 
 <script>
 
@@ -54,74 +21,64 @@ const price = document.getElementById("price");
 const message = document.getElementById("message");
 
 const ws = new WebSocket(
-  "wss://api.derivws.com/trading/v1/options/ws/public"
+    "wss://ws.binaryws.com/websockets/v3"
 );
 
-ws.onopen = function() {
+ws.onopen = function () {
 
-  status.textContent = "Connected 🟢";
+    status.textContent = "CONNECTED 🟢";
+    message.textContent = "Requesting ticks...";
 
-  message.textContent = "Requesting tick...";
+    ws.send(JSON.stringify({
+        ticks: "1HZ100V",
+        subscribe: 1,
+        req_id: 1
+    }));
+};
 
-  ws.send(JSON.stringify({
-    ticks: "1HZ100V",
-    subscribe: 1,
-    req_id: 1
-  }));
+ws.onmessage = function (event) {
+
+    console.log(event.data);
+
+    const data = JSON.parse(event.data);
+
+    if (data.error) {
+
+        status.textContent = "API ERROR ❌";
+        message.textContent = data.error.message;
+
+        return;
+    }
+
+    if (data.msg_type === "tick") {
+
+        status.textContent = "LIVE TICK 🟢";
+
+        price.textContent =
+            data.tick.quote;
+
+        message.textContent =
+            "Receiving live ticks";
+
+    }
+};
+
+ws.onerror = function () {
+
+    status.textContent = "WEBSOCKET ERROR ❌";
+    message.textContent = "Connection failed";
 
 };
 
-ws.onmessage = function(event) {
+ws.onclose = function (event) {
 
-  console.log(event.data);
-
-  const data = JSON.parse(event.data);
-
-  if (data.error) {
-
-    status.textContent = "API ERROR ❌";
-
+    status.textContent = "CLOSED 🔴";
     message.textContent =
-      data.error.message || "Unknown error";
-
-    return;
-  }
-
-  if (data.tick) {
-
-    status.textContent = "LIVE TICK 🟢";
-
-    price.textContent =
-      data.tick.quote;
-
-    message.textContent =
-      "Receiving live data";
-
-  }
-
-};
-
-ws.onerror = function() {
-
-  status.textContent =
-    "WEBSOCKET ERROR ❌";
-
-  message.textContent =
-    "Connection failed";
-
-};
-
-ws.onclose = function(event) {
-
-  status.textContent =
-    "CONNECTION CLOSED 🔴";
-
-  message.textContent =
-    "Close code: " + event.code;
+        "Close code: " + event.code;
 
 };
 
 </script>
 
 </body>
-  </html>
+</html>
