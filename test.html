@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Deriv Connection Test</title>
+
+  <style>
+    body {
+      font-family: Arial;
+      text-align: center;
+      padding: 30px;
+    }
+
+    h1 {
+      font-size: 25px;
+    }
+
+    #status {
+      font-weight: bold;
+    }
+
+    #price {
+      font-size: 30px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>Deriv Connection Test</h1>
+
+  <p>
+    Status:
+    <span id="status">Connecting...</span>
+  </p>
+
+  <p>
+    Live Price:
+    <span id="price">Waiting...</span>
+  </p>
+
+  <p>
+    Message:
+    <span id="message">Waiting...</span>
+  </p>
+
+<script>
+
+const status = document.getElementById("status");
+const price = document.getElementById("price");
+const message = document.getElementById("message");
+
+const ws = new WebSocket(
+  "wss://api.derivws.com/trading/v1/options/ws/public"
+);
+
+ws.onopen = function() {
+
+  status.textContent = "Connected 🟢";
+
+  message.textContent = "Requesting tick...";
+
+  ws.send(JSON.stringify({
+    ticks: "1HZ100V",
+    subscribe: 1,
+    req_id: 1
+  }));
+
+};
+
+ws.onmessage = function(event) {
+
+  console.log(event.data);
+
+  const data = JSON.parse(event.data);
+
+  if (data.error) {
+
+    status.textContent = "API ERROR ❌";
+
+    message.textContent =
+      data.error.message || "Unknown error";
+
+    return;
+  }
+
+  if (data.tick) {
+
+    status.textContent = "LIVE TICK 🟢";
+
+    price.textContent =
+      data.tick.quote;
+
+    message.textContent =
+      "Receiving live data";
+
+  }
+
+};
+
+ws.onerror = function() {
+
+  status.textContent =
+    "WEBSOCKET ERROR ❌";
+
+  message.textContent =
+    "Connection failed";
+
+};
+
+ws.onclose = function(event) {
+
+  status.textContent =
+    "CONNECTION CLOSED 🔴";
+
+  message.textContent =
+    "Close code: " + event.code;
+
+};
+
+</script>
+
+</body>
+  </html>
