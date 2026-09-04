@@ -4,50 +4,88 @@ const signal = document.getElementById("signal");
 const confidence = document.getElementById("confidence");
 const strength = document.getElementById("strength");
 
-const ws = new WebSocket(
-    "wss://ws.binaryws.com/websockets/v3"
-);
+status.textContent = "Starting connection...";
 
-status.textContent = "Connecting...";
+let ws;
 
-ws.onopen = function () {
-    status.textContent = "Connected 🟢";
+try {
+    ws = new WebSocket("wss://ws.binaryws.com/websockets/v3");
 
-    ws.send(JSON.stringify({
-        ticks: "1HZ100V",
-        subscribe: 1,
-        req_id: 1
-    }));
-};
+    // If nothing happens after 10 seconds
+    const timeout = setTimeout(() => {
+        if (ws.readyState === WebSocket.CONNECTING) {
+            status.textContent = "Connection TIMEOUT ❌";
+            signal.textContent = "WebSocket did not connect";
+            confidence.textContent = "Check connection";
+            strength.textContent = "Timeout";
+            ws.close();
+        }
+    }, 10000);
 
-ws.onmessage = function (event) {
+    ws.onopen = function () {
+        clearTimeout(timeout);
 
-    const data = JSON.parse(event.data);
+        status.textContent = "Connected 🟢";
+        signal.textContent = "Getting market...";
+        strength.textContent = "Connected";
 
-    console.log(data);
+        // Ask Deriv for available markets
+        ws.send(JSON.stringify({
+            active_symbols: "brief",
+            product_type: "basic",
+            req_id: 1
+        }));
 
-    if (data.error) {
-        status.textContent = "API ERROR ❌";
-        signal.textContent = data.error.message;
-        return;
-    }
+        // Subscribe to live ticks
+        ws.send(JSON.stringify({
+            ticks: "1HZ100V",
+            subscribe: 1,
+            req_id: 2
+        }));
+    };
 
-    if (data.msg_type === "tick") {
+    ws.onmessage = function (event) {
+        const data = JSON.parse(event.data);
 
-        const price = data.tick.quote;
+        console.log("DERIV:", data);
 
-        tick.textContent = price;
+        if (data.error) {
+            status.textContent = "API ERROR ❌";
+            signal.textContent = data.error.message;
+            return;
+        }
 
-        signal.textContent = "WAIT ⏳";
-        confidence.textContent = "Collecting...";
-        strength.textContent = "Receiving ticks";
-    }
-};
+        if (data.msg_type === "tick") {
+            status.textContent = "LIVE TICK 🟢";
 
-ws.onerror = function () {
-    status.textContent = "WebSocket ERROR ❌";
-};
+            tick.textContent = data.tick.quote;
 
-ws.onclose = function () {
-    status.textContent = "Connection CLOSED 🔴";
-};
+            signal.textContent = "WAIT ⏳";
+            confidence.textContent = "Collecting";
+            strength.textContent = "Receiving ticks";
+        }
+
+        if (data.msg_type === "active_symbols") {
+            strength.textContent = "Market data ready";
+        }
+    };
+
+    ws.onerror = function () {
+        clearTimeout(timeout);
+
+        status.textContent = "WebSocket ERROR ❌";
+        signal.textContent = "Connection failed";
+        confidence.textContent = "0%";
+        strength.textContent = "Check network";
+    };
+
+    ws.onclose = function () {
+        if (status.textContent !== "LIVE TICK 🟢") {
+            status.textContent = "WebSocket CLOSED 🔴";
+        }
+    };
+
+} catch (error) {
+    status.textContent = "JavaScript ERROR ❌";
+    signal.textContent = error.message;
+}
