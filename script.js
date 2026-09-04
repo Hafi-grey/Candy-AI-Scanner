@@ -6,7 +6,7 @@ const strength = document.getElementById("strength");
 
 status.textContent = "Connecting...";
 
-const ws = new WebSocket("wss://ws.derivws.com/websockets/v3");
+const ws = new WebSocket("wss://ws.derivws.com/websockets/v3?app_id=YOUR_APP_ID");
 
 ws.onopen = function () {
     status.textContent = "CONNECTED 🟢";
