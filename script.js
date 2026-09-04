@@ -4,39 +4,37 @@ const signal = document.getElementById("signal");
 const confidence = document.getElementById("confidence");
 const strength = document.getElementById("strength");
 
-status.textContent = "Starting connection...";
-
 let ws;
+let reconnectTimer;
 
-try {
-    ws = new WebSocket("wss://ws.binaryws.com/websockets/v3");
+function connect() {
 
-    // If nothing happens after 10 seconds
-    const timeout = setTimeout(() => {
-        if (ws.readyState === WebSocket.CONNECTING) {
-            status.textContent = "Connection TIMEOUT ❌";
-            signal.textContent = "WebSocket did not connect";
-            confidence.textContent = "Check connection";
-            strength.textContent = "Timeout";
-            ws.close();
-        }
-    }, 10000);
+    clearTimeout(reconnectTimer);
+
+    status.textContent = "Connecting... 🔄";
+    signal.textContent = "Waiting...";
+    confidence.textContent = "0%";
+    strength.textContent = "Connecting";
+
+    ws = new WebSocket(
+        "wss://ws.binaryws.com/websockets/v3"
+    );
 
     ws.onopen = function () {
-        clearTimeout(timeout);
+
+        console.log("CONNECTED TO DERIV");
 
         status.textContent = "Connected 🟢";
-        signal.textContent = "Getting market...";
-        strength.textContent = "Connected";
+        strength.textContent = "Requesting market...";
 
-        // Ask Deriv for available markets
+        // Request active markets
         ws.send(JSON.stringify({
             active_symbols: "brief",
             product_type: "basic",
             req_id: 1
         }));
 
-        // Subscribe to live ticks
+        // Subscribe to 1HZ100V
         ws.send(JSON.stringify({
             ticks: "1HZ100V",
             subscribe: 1,
@@ -44,18 +42,56 @@ try {
         }));
     };
 
+
     ws.onmessage = function (event) {
-        const data = JSON.parse(event.data);
 
-        console.log("DERIV:", data);
+        console.log("DERIV MESSAGE:", event.data);
 
-        if (data.error) {
-            status.textContent = "API ERROR ❌";
-            signal.textContent = data.error.message;
+        let data;
+
+        try {
+            data = JSON.parse(event.data);
+        } catch (error) {
+            console.log("JSON ERROR:", error);
             return;
         }
 
+        // Show API error
+        if (data.error) {
+
+            console.error("DERIV API ERROR:", data.error);
+
+            status.textContent = "API ERROR ❌";
+            signal.textContent =
+                data.error.message || "Unknown API error";
+
+            confidence.textContent = "0%";
+            strength.textContent = "Request failed";
+
+            return;
+        }
+
+
+        // Active symbols received
+        if (data.msg_type === "active_symbols") {
+
+            console.log(
+                "ACTIVE SYMBOLS RECEIVED:",
+                data.active_symbols
+            );
+
+            strength.textContent = "Market data ready";
+        }
+
+
+        // LIVE TICK
         if (data.msg_type === "tick") {
+
+            console.log(
+                "LIVE TICK:",
+                data.tick.quote
+            );
+
             status.textContent = "LIVE TICK 🟢";
 
             tick.textContent = data.tick.quote;
@@ -64,28 +100,47 @@ try {
             confidence.textContent = "Collecting";
             strength.textContent = "Receiving ticks";
         }
-
-        if (data.msg_type === "active_symbols") {
-            strength.textContent = "Market data ready";
-        }
     };
 
-    ws.onerror = function () {
-        clearTimeout(timeout);
+
+    ws.onerror = function (error) {
+
+        console.error("WEBSOCKET ERROR:", error);
 
         status.textContent = "WebSocket ERROR ❌";
-        signal.textContent = "Connection failed";
+        signal.textContent = "Connection error";
         confidence.textContent = "0%";
-        strength.textContent = "Check network";
+        strength.textContent = "See console";
     };
 
-    ws.onclose = function () {
-        if (status.textContent !== "LIVE TICK 🟢") {
-            status.textContent = "WebSocket CLOSED 🔴";
-        }
-    };
 
-} catch (error) {
-    status.textContent = "JavaScript ERROR ❌";
-    signal.textContent = error.message;
+    ws.onclose = function (event) {
+
+        console.log(
+            "WEBSOCKET CLOSED",
+            "Code:",
+            event.code,
+            "Reason:",
+            event.reason
+        );
+
+        status.textContent =
+            "Connection closed 🔴";
+
+        signal.textContent =
+            "Reconnecting...";
+
+        strength.textContent =
+            "Waiting for connection";
+
+        // Try again after 3 seconds
+        reconnectTimer = setTimeout(
+            connect,
+            3000
+        );
+    };
 }
+
+
+// START
+connect();
