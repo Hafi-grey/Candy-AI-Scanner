@@ -4,13 +4,22 @@ const signal = document.getElementById("signal");
 const confidence = document.getElementById("confidence");
 const strength = document.getElementById("strength");
 
+const APP_ID = "34j74jco1hp5SDjVzKDxT";
+
 status.textContent = "Connecting...";
 
-const ws = new WebSocket("wss://ws.derivws.com/websockets/v3?app_id=34j74jco1hp5SDjVzKDxT");
+const url =
+    "wss://ws.derivws.com/websockets/v3?app_id=" + APP_ID;
 
-ws.onopen = function () {
-    status.textContent = "CONNECTED 🟢";
-    strength.textContent = "Sending tick request...";
+console.log("Connecting to:", url);
+
+const ws = new WebSocket(url);
+
+ws.onopen = () => {
+    console.log("OPEN");
+
+    status.textContent = "Connected 🟢";
+    strength.textContent = "Requesting tick...";
 
     ws.send(JSON.stringify({
         ticks: "1HZ100V",
@@ -18,18 +27,20 @@ ws.onopen = function () {
     }));
 };
 
-ws.onmessage = function (event) {
-    console.log(event.data);
+ws.onmessage = (event) => {
+
+    console.log("MESSAGE:", event.data);
 
     const data = JSON.parse(event.data);
 
     if (data.error) {
         status.textContent = "API ERROR ❌";
         signal.textContent = data.error.message;
+        strength.textContent = "Deriv rejected request";
         return;
     }
 
-    if (data.tick) {
+    if (data.msg_type === "tick") {
         status.textContent = "LIVE TICK 🟢";
         tick.textContent = data.tick.quote;
         signal.textContent = "WAIT ⏳";
@@ -38,14 +49,17 @@ ws.onmessage = function (event) {
     }
 };
 
-ws.onerror = function () {
+ws.onerror = (event) => {
+    console.log("ERROR:", event);
     status.textContent = "WEBSOCKET ERROR ❌";
-    strength.textContent = "Connection failed";
+    strength.textContent = "Browser/network error";
 };
 
-ws.onclose = function (event) {
-    console.log("Closed:", event.code, event.reason);
+ws.onclose = (event) => {
+    console.log("CLOSED");
+    console.log("Code:", event.code);
+    console.log("Reason:", event.reason);
 
-    status.textContent = "CONNECTION CLOSED 🔴";
-    strength.textContent = "Code: " + event.code;
+    status.textContent = "CLOSED 🔴";
+    strength.textContent = "Code " + event.code;
 };
