@@ -4,43 +4,38 @@ const signal = document.getElementById("signal");
 const confidence = document.getElementById("confidence");
 const strength = document.getElementById("strength");
 
-const APP_ID = "34j74jco1hp5SDjVzKDxT";
-
 status.textContent = "Connecting...";
 
-const url =
-    "wss://ws.derivws.com/websockets/v3?app_id=" + APP_ID;
+const ws = new WebSocket(
+    "wss://api.derivws.com/trading/v1/options/ws/public"
+);
 
-console.log("Connecting to:", url);
-
-const ws = new WebSocket(url);
-
-ws.onopen = () => {
-    console.log("OPEN");
+ws.onopen = function () {
+    console.log("CONNECTED");
 
     status.textContent = "Connected 🟢";
-    strength.textContent = "Requesting tick...";
+    strength.textContent = "Requesting market data...";
 
+    // Request a live tick stream
     ws.send(JSON.stringify({
         ticks: "1HZ100V",
         subscribe: 1
     }));
 };
 
-ws.onmessage = (event) => {
-
-    console.log("MESSAGE:", event.data);
+ws.onmessage = function (event) {
+    console.log("DERIV:", event.data);
 
     const data = JSON.parse(event.data);
 
     if (data.error) {
         status.textContent = "API ERROR ❌";
-        signal.textContent = data.error.message;
-        strength.textContent = "Deriv rejected request";
+        signal.textContent = data.error.message || "API error";
+        strength.textContent = "Request rejected";
         return;
     }
 
-    if (data.msg_type === "tick") {
+    if (data.tick) {
         status.textContent = "LIVE TICK 🟢";
         tick.textContent = data.tick.quote;
         signal.textContent = "WAIT ⏳";
@@ -49,17 +44,16 @@ ws.onmessage = (event) => {
     }
 };
 
-ws.onerror = (event) => {
-    console.log("ERROR:", event);
+ws.onerror = function (event) {
+    console.log("WebSocket error:", event);
+
     status.textContent = "WEBSOCKET ERROR ❌";
-    strength.textContent = "Browser/network error";
+    strength.textContent = "Connection failed";
 };
 
-ws.onclose = (event) => {
-    console.log("CLOSED");
-    console.log("Code:", event.code);
-    console.log("Reason:", event.reason);
+ws.onclose = function (event) {
+    console.log("Closed:", event.code, event.reason);
 
-    status.textContent = "CLOSED 🔴";
-    strength.textContent = "Code " + event.code;
+    status.textContent = "CONNECTION CLOSED 🔴";
+    strength.textContent = "Code: " + event.code;
 };
