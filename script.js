@@ -9,7 +9,11 @@ status.textContent = "Connecting...";
 const ws = new WebSocket(
     "wss://api.derivws.com/trading/v1/options/ws/public"
 );
-
+ws.send(JSON.stringify({
+  ticks: "1HZ100V",
+  subscribe: 1,
+  req_id: 1
+}));
 ws.onopen = function () {
     console.log("CONNECTED");
 
