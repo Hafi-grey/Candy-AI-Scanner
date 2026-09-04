@@ -3,78 +3,59 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Deriv Test</title>
+<title>Deriv WebSocket Test</title>
 </head>
 
 <body>
 
 <h2>Deriv Connection Test</h2>
 
-<p>Status: <span id="status">Connecting...</span></p>
-<p>Price: <span id="price">Waiting...</span></p>
-<p>Message: <span id="message">Waiting...</span></p>
+<p>Status: <b id="status">Starting...</b></p>
+<p>Server message: <span id="message">Waiting...</span></p>
+<p>Close code: <span id="code">-</span></p>
 
 <script>
 
 const status = document.getElementById("status");
-const price = document.getElementById("price");
 const message = document.getElementById("message");
+const code = document.getElementById("code");
 
 const ws = new WebSocket(
-    "wss://ws.binaryws.com/websockets/v3"
+    "wss://api.derivws.com/trading/v1/options/ws/public"
 );
 
 ws.onopen = function () {
 
     status.textContent = "CONNECTED 🟢";
-    message.textContent = "Requesting ticks...";
+    message.textContent = "WebSocket opened successfully";
 
-    ws.send(JSON.stringify({
-        ticks: "1HZ100V",
-        subscribe: 1,
-        req_id: 1
-    }));
 };
 
 ws.onmessage = function (event) {
 
-    console.log(event.data);
+    console.log("SERVER:", event.data);
 
-    const data = JSON.parse(event.data);
+    message.textContent = event.data;
 
-    if (data.error) {
-
-        status.textContent = "API ERROR ❌";
-        message.textContent = data.error.message;
-
-        return;
-    }
-
-    if (data.msg_type === "tick") {
-
-        status.textContent = "LIVE TICK 🟢";
-
-        price.textContent =
-            data.tick.quote;
-
-        message.textContent =
-            "Receiving live ticks";
-
-    }
 };
 
 ws.onerror = function () {
 
-    status.textContent = "WEBSOCKET ERROR ❌";
-    message.textContent = "Connection failed";
+    status.textContent = "ERROR ❌";
+    message.textContent = "WebSocket error";
 
 };
 
 ws.onclose = function (event) {
 
     status.textContent = "CLOSED 🔴";
-    message.textContent =
-        "Close code: " + event.code;
+    code.textContent = event.code;
+
+    console.log(
+        "Closed:",
+        event.code,
+        event.reason
+    );
 
 };
 
