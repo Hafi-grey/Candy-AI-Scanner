@@ -1,10 +1,49 @@
-<p>Recent Digits:</p>
-<div id="digits">TEST</div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<p>Confidence:
-<span id="confidence">50%</span>
-</p>
+    <title>Candy AI Rise Fall Scanner</title>
 
-<p>Strength:
-<span id="strength">TESTING</span>
-</p>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <div class="container">
+
+        <h1>🍭 Candy AI Scanner</h1>
+        <h2>Rise / Fall</h2>
+
+        <div class="box">
+            <p>Status</p>
+            <h3 id="status">Connecting...</h3>
+        </div>
+
+        <div class="box">
+            <p>Live Price</p>
+            <h3 id="tick">Waiting...</h3>
+        </div>
+
+        <div class="box">
+            <p>Trend Signal</p>
+            <h3 id="signal">WAIT ⏳</h3>
+        </div>
+
+        <div class="box">
+            <p>Confidence</p>
+            <h3 id="confidence">Waiting...</h3>
+        </div>
+
+        <div class="box">
+            <p>Strength</p>
+            <h3 id="strength">Waiting...</h3>
+        </div>
+
+    </div>
+
+    <script src="script.js"></script>
+
+</body>
+</html>
