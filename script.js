@@ -4,89 +4,50 @@ const signal = document.getElementById("signal");
 const confidence = document.getElementById("confidence");
 const strength = document.getElementById("strength");
 
-let prices = [];
+const ws = new WebSocket(
+    "wss://ws.binaryws.com/websockets/v3"
+);
 
-function connect() {
-    status.textContent = "Connecting...";
+status.textContent = "Connecting...";
 
-    const ws = new WebSocket(
-        "wss://ws.derivws.com/websockets/v3?app_id=1089"
-    );
+ws.onopen = function () {
+    status.textContent = "Connected 🟢";
 
-    ws.onopen = function () {
-        status.textContent = "Connected 🟢";
+    ws.send(JSON.stringify({
+        ticks: "1HZ100V",
+        subscribe: 1,
+        req_id: 1
+    }));
+};
 
-        ws.send(JSON.stringify({
-            ticks: "R_100",
-            subscribe: 1
-        }));
-    };
+ws.onmessage = function (event) {
 
-    ws.onmessage = function (event) {
-        const data = JSON.parse(event.data);
+    const data = JSON.parse(event.data);
 
-        console.log(data);
-
-        if (data.tick) {
-            const price = Number(data.tick.quote);
-
-            tick.textContent = price;
-
-            prices.push(price);
-
-            if (prices.length > 30) {
-                prices.shift();
-            }
-
-            analyze();
-        }
+    console.log(data);
 
     if (data.error) {
-    status.textContent = "API ERROR ❌";
-    signal.textContent = data.error.message;
-    console.log("DERIV ERROR:", data.error);
-    }
-        
-        }
-    };
-
-    ws.onerror = function () {
-        status.textContent = "WebSocket ERROR ❌";
-    };
-
-    ws.onclose = function () {
-        status.textContent = "WebSocket CLOSED 🔴";
-    };
-}
-
-function analyze() {
-
-    if (prices.length < 10) {
-        signal.textContent = "WAIT ⏳";
-        confidence.textContent = prices.length + "/10 ticks";
-        strength.textContent = "Collecting...";
+        status.textContent = "API ERROR ❌";
+        signal.textContent = data.error.message;
         return;
     }
 
-    const first = prices[0];
-    const last = prices[prices.length - 1];
+    if (data.msg_type === "tick") {
 
-    const movement = last - first;
+        const price = data.tick.quote;
 
-    if (movement > 0) {
-        signal.textContent = "📈 RISE";
-        strength.textContent = "Bullish";
-    } 
-    else if (movement < 0) {
-        signal.textContent = "📉 FALL";
-        strength.textContent = "Bearish";
-    } 
-    else {
+        tick.textContent = price;
+
         signal.textContent = "WAIT ⏳";
-        strength.textContent = "Neutral";
+        confidence.textContent = "Collecting...";
+        strength.textContent = "Receiving ticks";
     }
+};
 
-    confidence.textContent = "Testing";
-}
+ws.onerror = function () {
+    status.textContent = "WebSocket ERROR ❌";
+};
 
-connect();
+ws.onclose = function () {
+    status.textContent = "Connection CLOSED 🔴";
+};
