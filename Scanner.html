@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Rise/Fall Scanner</title>
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background: #111;
+    color: white;
+    text-align: center;
+    padding: 20px;
+}
+
+.box {
+    max-width: 400px;
+    margin: auto;
+    background: #222;
+    padding: 20px;
+    border-radius: 15px;
+}
+
+h2 {
+    margin-bottom: 25px;
+}
+
+p {
+    font-size: 18px;
+    margin: 15px 0;
+}
+
+.value {
+    font-weight: bold;
+}
+
+#signal {
+    font-size: 30px;
+    font-weight: bold;
+    margin: 25px 0;
+}
+</style>
+</head>
+
+<body>
+
+<div class="box">
+
+<h2>📊 Rise/Fall Scanner</h2>
+
+<p>
+Status:
+<span id="status" class="value">Connecting...</span>
+</p>
+
+<p>
+Live Price:
+<span id="price" class="value">Waiting...</span>
+</p>
+
+<p>
+Last Digit:
+<span id="digit" class="value">-</span>
+</p>
+
+<p>
+Ticks:
+<span id="ticks" class="value">0</span>
+</p>
+
+<p>
+Rise Count:
+<span id="rise" class="value">0</span>
+</p>
+
+<p>
+Fall Count:
+<span id="fall" class="value">0</span>
+</p>
+
+<div id="signal">WAITING...</div>
+
+<p>
+Confidence:
+<span id="confidence" class="value">0%</span>
+</p>
+
+</div>
+
+<script>
+
+const status = document.getElementById("status");
+const price = document.getElementById("price");
+const digit = document.getElementById("digit");
+const ticksDisplay = document.getElementById("ticks");
+const riseDisplay = document.getElementById("rise");
+const fallDisplay = document.getElementById("fall");
+const signal = document.getElementById("signal");
+const confidence = document.getElementById("confidence");
+
+let previousPrice = null;
+let ticks = 0;
+let riseCount = 0;
+let fallCount = 0;
+
+const ws = new WebSocket(
+    "wss://api.derivws.com/trading/v1/options/ws/public"
+);
+
+ws.onopen = function() {
+
+    status.textContent = "CONNECTED 🟢";
+
+    ws.send(JSON.stringify({
+        ticks: "1HZ100V",
+        subscribe: 1
+    }));
+
+};
+
+ws.onmessage = function(event) {
+
+    try {
+
+        const data = JSON.parse(event.data);
+
+        if (!data.tick) return;
+
+        const currentPrice = Number(data.tick.quote);
+
+        price.textContent = currentPrice;
+
+        ticks++;
+
+        ticksDisplay.textContent = ticks;
+
+        const lastDigit =
+            String(currentPrice)
+            .replace(".", "")
+            .slice(-1);
+
+        digit.textContent = lastDigit;
+
+        if (previousPrice !== null) {
+
+            if (currentPrice > previousPrice) {
+                riseCount++;
+            }
+
+            if (currentPrice < previousPrice) {
+                fallCount++;
+            }
+
+        }
+
+        previousPrice = currentPrice;
+
+        riseDisplay.textContent = riseCount;
+        fallDisplay.textContent = fallCount;
+
+        const total = riseCount + fallCount;
+
+        if (total >= 5) {
+
+            if (riseCount > fallCount) {
+
+                signal.textContent = "⬆️ RISE";
+                confidence.textContent =
+                    Math.round((riseCount / total) * 100) + "%";
+
+            } else if (fallCount > riseCount) {
+
+                signal.textContent = "⬇️ FALL";
+                confidence.textContent =
+                    Math.round((fallCount / total) * 100) + "%";
+
+            } else {
+
+                signal.textContent = "WAIT";
+                confidence.textContent = "50%";
+            }
+        }
+
+        status.textContent = "LIVE TICK 🟢";
+
+    } catch(error) {
+
+        console.log(error);
+
+    }
+
+};
+
+ws.onerror = function() {
+
+    status.textContent = "ERROR ❌";
+
+};
+
+ws.onclose = function() {
+
+    status.textContent = "CLOSED 🔴";
+
+};
+
+</script>
+
+</body>
+</html>
