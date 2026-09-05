@@ -230,80 +230,45 @@ ws.onmessage = function(event) {
         let fallPercent =
             (fall / total) * 100;
 
+    
+    
+
         /*
-        Conservative signal
-        */
+Strong confirmation signal
+*/
 
-        if (
-            risePercent >= 65 &&
-            last > first
-        ) {
+if (risePercent >= 70 && last > first) {
 
-            signal.textContent = "⬆️ RISE";
-            confidence.textContent =
-                Math.round(risePercent) + "%";
-
-            reason.textContent =
-                "Recent ticks show stronger upward movement.";
-
-        }
-
-        else if (
-            fallPercent >= 65 &&
-            last < first
-        ) {
-
-            signal.textContent = "⬇️ FALL";
-            confidence.textContent =
-                Math.round(fallPercent) + "%";
-
-            reason.textContent =
-                "Recent ticks show stronger downward movement.";
-
-        }
-
-        else {
-
-            signal.textContent = "⏸ WAIT";
-            confidence.textContent =
-                Math.round(
-                    Math.max(risePercent, fallPercent)
-                ) + "%";
-
-            reason.textContent =
-                "Movement is not strong enough for a signal.";
-
-        }
-
-    }
-
-    catch(error) {
-
-        console.log(
-            "Reading error:",
-            error
-        );
-
-    }
-
-};
-
-ws.onerror = function() {
-
-    status.textContent = "ERROR ❌";
+    signal.textContent = "⬆️ RISE";
+    confidence.textContent =
+        Math.round(risePercent) + "%";
 
     reason.textContent =
-        "WebSocket connection error.";
+        "Strong upward confirmation from recent ticks.";
 
-};
+}
 
-ws.onclose = function(event) {
+else if (fallPercent >= 70 && last < first) {
 
-    status.textContent = "CLOSED 🔴";
+    signal.textContent = "⬇️ FALL";
+    confidence.textContent =
+        Math.round(fallPercent) + "%";
 
-};
+    reason.textContent =
+        "Strong downward confirmation from recent ticks.";
 
-</script>
+}
 
-</body>
-    </html>
+else {
+
+    signal.textContent = "⏸ WAIT";
+
+    confidence.textContent =
+        Math.round(
+            Math.max(risePercent, fallPercent)
+        ) + "%";
+
+    reason.textContent =
+        "No strong confirmation. Wait for a clearer setup.";
+
+                }
