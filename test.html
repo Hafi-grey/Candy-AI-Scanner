@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Deriv WebSocket Test</title>
+<title>Deriv Connection Test</title>
 </head>
 
 <body>
@@ -25,41 +25,25 @@ const ws = new WebSocket(
 );
 
 ws.onopen = function () {
-
     status.textContent = "CONNECTED 🟢";
     message.textContent = "WebSocket opened successfully";
-
 };
 
 ws.onmessage = function (event) {
-
     console.log("SERVER:", event.data);
-
     message.textContent = event.data;
-
 };
 
 ws.onerror = function (event) {
     status.textContent = "ERROR ❌";
-    message.textContent = "Error type: " + event.type;
+    message.textContent = "WebSocket error";
     console.log("WebSocket error:", event);
 };
 
-
-
-};
-
 ws.onclose = function (event) {
-
     status.textContent = "CLOSED 🔴";
     code.textContent = event.code;
-
-    console.log(
-        "Closed:",
-        event.code,
-        event.reason
-    );
-
+    console.log("Closed:", event.code, event.reason);
 };
 
 </script>
