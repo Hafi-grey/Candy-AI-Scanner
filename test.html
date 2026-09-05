@@ -3,20 +3,22 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Deriv Connection Test</title>
+<title>Deriv Tick Test</title>
 </head>
 
 <body>
 
-<h2>Deriv Connection Test</h2>
+<h2>Deriv Tick Test</h2>
 
 <p>Status: <b id="status">Starting...</b></p>
+<p>Price: <b id="price">Waiting...</b></p>
 <p>Server message: <span id="message">Waiting...</span></p>
 <p>Close code: <span id="code">-</span></p>
 
 <script>
 
 const status = document.getElementById("status");
+const price = document.getElementById("price");
 const message = document.getElementById("message");
 const code = document.getElementById("code");
 
@@ -25,25 +27,57 @@ const ws = new WebSocket(
 );
 
 ws.onopen = function () {
+
     status.textContent = "CONNECTED 🟢";
-    message.textContent = "WebSocket opened successfully";
+    message.textContent = "Requesting live tick...";
+
+    ws.send(JSON.stringify({
+        ticks: "1HZ100V",
+        subscribe: 1
+    }));
+
 };
 
 ws.onmessage = function (event) {
+
     console.log("SERVER:", event.data);
+
     message.textContent = event.data;
+
+    try {
+
+        const data = JSON.parse(event.data);
+
+        if (data.tick) {
+            price.textContent = data.tick.quote;
+            status.textContent = "LIVE TICK 🟢";
+        }
+
+        if (data.error) {
+            status.textContent = "API ERROR ❌";
+            message.textContent = data.error.message;
+        }
+
+    } catch (error) {
+
+        console.log("Message could not be read:", error);
+
+    }
+
 };
 
-ws.onerror = function (event) {
+ws.onerror = function () {
+
     status.textContent = "ERROR ❌";
     message.textContent = "WebSocket error";
-    console.log("WebSocket error:", event);
+
 };
 
 ws.onclose = function (event) {
+
     status.textContent = "CLOSED 🔴";
     code.textContent = event.code;
-    console.log("Closed:", event.code, event.reason);
+
 };
 
 </script>
