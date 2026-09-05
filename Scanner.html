@@ -4,34 +4,43 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>Candy Rise/Fall Scanner</title>
+<title>Candy AI Rise/Fall Scanner</title>
 
 <style>
 body {
     font-family: Arial, sans-serif;
     background: #111;
     color: white;
-    text-align: center;
+    margin: 0;
     padding: 15px;
 }
 
-.box {
-    max-width: 420px;
+.container {
+    max-width: 450px;
     margin: auto;
-    background: #222;
-    padding: 20px;
-    border-radius: 15px;
 }
 
 h2 {
-    margin-bottom: 20px;
+    text-align: center;
+    margin-bottom: 18px;
+}
+
+.card {
+    background: #222;
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 12px;
 }
 
 .row {
-    background: #333;
-    padding: 12px;
-    margin: 8px 0;
-    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid #333;
+}
+
+.row:last-child {
+    border-bottom: none;
 }
 
 .value {
@@ -39,236 +48,652 @@ h2 {
 }
 
 #signal {
+    text-align: center;
     font-size: 32px;
     font-weight: bold;
-    margin: 25px 0;
+    margin: 15px 0;
+}
+
+#strength {
+    text-align: center;
+    font-size: 20px;
+    font-weight: bold;
 }
 
 #reason {
+    text-align: center;
+    color: #bbb;
     font-size: 14px;
-    color: #ccc;
+}
+
+.digits {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: center;
+    margin-top: 10px;
+}
+
+.digit {
+    background: #333;
+    padding: 8px 11px;
+    border-radius: 7px;
+    font-weight: bold;
+}
+
+.history {
+    font-size: 14px;
+}
+
+.history div {
+    padding: 7px;
+    border-bottom: 1px solid #333;
 }
 </style>
 </head>
 
 <body>
 
-<div class="box">
+<div class="container">
 
-<h2>🤖 Candy Rise/Fall Scanner</h2>
+<h2>🤖 Candy AI Rise/Fall Scanner</h2>
+
+<div class="card">
 
 <div class="row">
-Status:
+<span>Status</span>
 <span id="status" class="value">Connecting...</span>
 </div>
 
 <div class="row">
-Live Price:
+<span>Live Price</span>
 <span id="price" class="value">Waiting...</span>
 </div>
 
 <div class="row">
-Ticks Collected:
+<span>Ticks</span>
 <span id="ticks" class="value">0</span>
 </div>
 
+</div>
+
+<div class="card">
+
 <div class="row">
-Recent Movement:
-<span id="movement" class="value">Waiting...</span>
+<span>Short Trend</span>
+<span id="shortTrend" class="value">WAIT</span>
 </div>
 
 <div class="row">
-Rise:
+<span>Medium Trend</span>
+<span id="mediumTrend" class="value">WAIT</span>
+</div>
+
+<div class="row">
+<span>Overall Trend</span>
+<span id="overallTrend" class="value">WAIT</span>
+</div>
+
+<div class="row">
+<span>Rise Count</span>
 <span id="rise" class="value">0</span>
 </div>
 
 <div class="row">
-Fall:
+<span>Fall Count</span>
 <span id="fall" class="value">0</span>
 </div>
 
-<div id="signal">WAITING...</div>
-
-<div class="row">
-Confidence:
-<span id="confidence" class="value">0%</span>
 </div>
 
-<p id="reason">Collecting market data...</p>
+<div class="card">
+
+<div id="signal">WAITING...</div>
+
+<div id="strength">Strength: Waiting</div>
+
+<p id="confidence">Confidence: 0%</p>
+
+<p id="reason">
+Collecting enough market data...
+</p>
+
+</div>
+
+<div class="card">
+
+<h3>🔢 Recent Digits</h3>
+
+<div id="digits" class="digits">
+Waiting...
+</div>
+
+</div>
+
+<div class="card">
+
+<h3>📋 Signal History</h3>
+
+<div id="history" class="history">
+No signals yet.
+</div>
+
+</div>
 
 </div>
 
 <script>
 
-const status = document.getElementById("status");
-const price = document.getElementById("price");
-const ticksDisplay = document.getElementById("ticks");
-const movementDisplay = document.getElementById("movement");
-const riseDisplay = document.getElementById("rise");
-const fallDisplay = document.getElementById("fall");
-const signal = document.getElementById("signal");
-const confidence = document.getElementById("confidence");
-const reason = document.getElementById("reason");
+const statusEl = document.getElementById("status");
+const priceEl = document.getElementById("price");
+const ticksEl = document.getElementById("ticks");
+
+const shortTrendEl = document.getElementById("shortTrend");
+const mediumTrendEl = document.getElementById("mediumTrend");
+const overallTrendEl = document.getElementById("overallTrend");
+
+const riseEl = document.getElementById("rise");
+const fallEl = document.getElementById("fall");
+
+const signalEl = document.getElementById("signal");
+const strengthEl = document.getElementById("strength");
+const confidenceEl = document.getElementById("confidence");
+const reasonEl = document.getElementById("reason");
+
+const digitsEl = document.getElementById("digits");
+const historyEl = document.getElementById("history");
+
+let ws = null;
 
 let prices = [];
+let digits = [];
+
 let tickCount = 0;
 
-const MAX_HISTORY = 20;
+let lastSignal = "";
 
-const ws = new WebSocket(
-    "wss://api.derivws.com/trading/v1/options/ws/public"
-);
+const MAX_PRICES = 30;
+const MAX_DIGITS = 12;
+const MAX_HISTORY = 10;
 
-ws.onopen = function() {
 
-    status.textContent = "CONNECTED 🟢";
+/* =========================
+   CONNECT
+========================= */
 
-    ws.send(JSON.stringify({
-        ticks: "1HZ100V",
-        subscribe: 1
-    }));
+function connect() {
 
-};
+    statusEl.textContent = "CONNECTING...";
 
-ws.onmessage = function(event) {
+    ws = new WebSocket(
+        "wss://api.derivws.com/trading/v1/options/ws/public"
+    );
 
-    try {
+    ws.onopen = function() {
 
-        const data = JSON.parse(event.data);
+        statusEl.textContent = "CONNECTED 🟢";
 
-        if (data.error) {
-            status.textContent = "API ERROR ❌";
-            reason.textContent = data.error.message;
-            return;
-        }
+        ws.send(JSON.stringify({
+            ticks: "1HZ100V",
+            subscribe: 1
+        }));
 
-        if (!data.tick) return;
+    };
 
-        const currentPrice = Number(data.tick.quote);
 
-        tickCount++;
+    /* =========================
+       RECEIVE TICKS
+    ========================= */
 
-        price.textContent = currentPrice;
-        ticksDisplay.textContent = tickCount;
+    ws.onmessage = function(event) {
 
-        prices.push(currentPrice);
+        try {
 
-        if (prices.length > MAX_HISTORY) {
-            prices.shift();
-        }
+            const data = JSON.parse(event.data);
 
-        status.textContent = "LIVE TICK 🟢";
+            if (data.error) {
 
-        /*
-        Need enough prices before creating
-        a signal.
-        */
+                statusEl.textContent = "API ERROR ❌";
 
-        if (prices.length < 6) {
+                reasonEl.textContent =
+                    data.error.message;
 
-            signal.textContent = "WAITING...";
-            confidence.textContent = "0%";
-            reason.textContent =
-                "Collecting more tick data...";
-
-            return;
-        }
-
-        let rise = 0;
-        let fall = 0;
-
-        for (let i = 1; i < prices.length; i++) {
-
-            if (prices[i] > prices[i - 1]) {
-                rise++;
+                return;
             }
 
-            if (prices[i] < prices[i - 1]) {
-                fall++;
+            if (!data.tick) return;
+
+            const currentPrice =
+                Number(data.tick.quote);
+
+            tickCount++;
+
+            priceEl.textContent =
+                currentPrice;
+
+            ticksEl.textContent =
+                tickCount;
+
+            statusEl.textContent =
+                "LIVE TICK 🟢";
+
+
+            /* PRICE HISTORY */
+
+            prices.push(currentPrice);
+
+            if (prices.length > MAX_PRICES) {
+                prices.shift();
             }
+
+
+            /* LAST DIGIT */
+
+            const priceString =
+                String(currentPrice);
+
+            const lastDigit =
+                priceString
+                .replace(".", "")
+                .slice(-1);
+
+            digits.push(lastDigit);
+
+            if (digits.length > MAX_DIGITS) {
+                digits.shift();
+            }
+
+            displayDigits();
+
+
+            /* ANALYSIS */
+
+            if (prices.length >= 10) {
+
+                analyzeMarket();
+
+            }
+
         }
 
-        riseDisplay.textContent = rise;
-        fallDisplay.textContent = fall;
+        catch(error) {
 
-        /*
-        Recent movement
-        */
+            console.log(
+                "Message error:",
+                error
+            );
 
-        const first =
-            prices[prices.length - 6];
-
-        const last =
-            prices[prices.length - 1];
-
-        let movement;
-
-        if (last > first) {
-
-            movement = "UP 📈";
-
-        } else if (last < first) {
-
-            movement = "DOWN 📉";
-
-        } else {
-
-            movement = "FLAT ➖";
         }
 
-        movementDisplay.textContent = movement;
+    };
 
-        /*
-        Calculate strength
-        */
 
-        const total = rise + fall;
+    /* =========================
+       ERROR
+    ========================= */
 
-        let risePercent =
-            (rise / total) * 100;
+    ws.onerror = function() {
 
-        let fallPercent =
-            (fall / total) * 100;
+        statusEl.textContent =
+            "CONNECTION ERROR ❌";
 
-    
-    
+    };
 
-        /*
-Strong confirmation signal
-*/
 
-if (risePercent >= 70 && last > first) {
+    /* =========================
+       CLOSED
+    ========================= */
 
-    signal.textContent = "⬆️ RISE";
-    confidence.textContent =
-        Math.round(risePercent) + "%";
+    ws.onclose = function() {
 
-    reason.textContent =
-        "Strong upward confirmation from recent ticks.";
+        statusEl.textContent =
+            "RECONNECTING...";
+
+        setTimeout(connect, 3000);
+
+    };
 
 }
 
-else if (fallPercent >= 70 && last < first) {
 
-    signal.textContent = "⬇️ FALL";
-    confidence.textContent =
-        Math.round(fallPercent) + "%";
+/* =========================
+   TREND FUNCTION
+========================= */
 
-    reason.textContent =
-        "Strong downward confirmation from recent ticks.";
+function getTrend(numberOfTicks) {
 
+    if (prices.length < numberOfTicks + 1) {
+        return "WAIT";
+    }
+
+    const start =
+        prices[prices.length - numberOfTicks - 1];
+
+    const end =
+        prices[prices.length - 1];
+
+    if (end > start) {
+        return "RISE";
+    }
+
+    if (end < start) {
+        return "FALL";
+    }
+
+    return "FLAT";
 }
 
-else {
 
-    signal.textContent = "⏸ WAIT";
+/* =========================
+   MARKET ANALYSIS
+========================= */
 
-    confidence.textContent =
+function analyzeMarket() {
+
+    const shortTrend =
+        getTrend(5);
+
+    const mediumTrend =
+        getTrend(10);
+
+    const overallTrend =
+        getTrend(20);
+
+
+    shortTrendEl.textContent =
+        shortTrend;
+
+    mediumTrendEl.textContent =
+        mediumTrend;
+
+    overallTrendEl.textContent =
+        overallTrend;
+
+
+    /* RISE/FALL COUNTS */
+
+    let rise = 0;
+    let fall = 0;
+
+    for (
+        let i = Math.max(1, prices.length - 20);
+        i < prices.length;
+        i++
+    ) {
+
+        if (prices[i] > prices[i - 1]) {
+            rise++;
+        }
+
+        else if (prices[i] < prices[i - 1]) {
+            fall++;
+        }
+
+    }
+
+    riseEl.textContent = rise;
+    fallEl.textContent = fall;
+
+
+    /* =========================
+       SCORING
+    ========================= */
+
+    let riseScore = 0;
+    let fallScore = 0;
+
+
+    if (shortTrend === "RISE") {
+        riseScore += 2;
+    }
+
+    if (shortTrend === "FALL") {
+        fallScore += 2;
+    }
+
+
+    if (mediumTrend === "RISE") {
+        riseScore += 2;
+    }
+
+    if (mediumTrend === "FALL") {
+        fallScore += 2;
+    }
+
+
+    if (overallTrend === "RISE") {
+        riseScore += 1;
+    }
+
+    if (overallTrend === "FALL") {
+        fallScore += 1;
+    }
+
+
+    /* COUNT CONFIRMATION */
+
+    if (rise > fall) {
+        riseScore += 1;
+    }
+
+    if (fall > rise) {
+        fallScore += 1;
+    }
+
+
+    const totalScore =
+        riseScore + fallScore;
+
+
+    if (totalScore === 0) {
+
+        showWait(
+            "Not enough confirmation."
+        );
+
+        return;
+    }
+
+
+    let confidence =
         Math.round(
-            Math.max(risePercent, fallPercent)
-        ) + "%";
+            (Math.max(riseScore, fallScore) /
+            totalScore) * 100
+        );
 
-    reason.textContent =
-        "No strong confirmation. Wait for a clearer setup.";
 
-                }
+    /* =========================
+       SIGNAL
+    ========================= */
+
+    let newSignal = "WAIT";
+
+    if (
+        riseScore >= 5 &&
+        riseScore > fallScore
+    ) {
+
+        newSignal = "RISE";
+
+    }
+
+    else if (
+        fallScore >= 5 &&
+        fallScore > riseScore
+    ) {
+
+        newSignal = "FALL";
+
+    }
+
+
+    /* =========================
+       STRENGTH
+    ========================= */
+
+    let strength = "WEAK";
+
+    if (confidence >= 75) {
+        strength = "STRONG";
+    }
+
+    else if (confidence >= 65) {
+        strength = "MEDIUM";
+    }
+
+
+    if (newSignal === "WAIT") {
+
+        showWait(
+            "Trend confirmation is mixed."
+        );
+
+        confidenceEl.textContent =
+            "Confidence: " + confidence + "%";
+
+        return;
+    }
+
+
+    signalEl.textContent =
+        newSignal === "RISE"
+        ? "⬆️ RISE"
+        : "⬇️ FALL";
+
+
+    strengthEl.textContent =
+        "Strength: " + strength;
+
+
+    confidenceEl.textContent =
+        "Confidence: " + confidence + "%";
+
+
+    reasonEl.textContent =
+        "Multiple recent trend measurements agree.";
+
+
+    /* SAVE ONLY NEW SIGNAL */
+
+    if (newSignal !== lastSignal) {
+
+        addHistory(
+            newSignal,
+            confidence,
+            strength
+        );
+
+        lastSignal = newSignal;
+
+    }
+
+}
+
+
+/* =========================
+   WAIT
+========================= */
+
+function showWait(text) {
+
+    signalEl.textContent =
+        "⏸ WAIT";
+
+    strengthEl.textContent =
+        "Strength: Weak";
+
+    reasonEl.textContent =
+        text;
+
+}
+
+
+/* =========================
+   DIGITS
+========================= */
+
+function displayDigits() {
+
+    digitsEl.innerHTML = "";
+
+    digits.forEach(function(digit) {
+
+        const span =
+            document.createElement("span");
+
+        span.className =
+            "digit";
+
+        span.textContent =
+            digit;
+
+        digitsEl.appendChild(span);
+
+    });
+
+}
+
+
+/* =========================
+   HISTORY
+========================= */
+
+function addHistory(
+    signal,
+    confidence,
+    strength
+) {
+
+    const time =
+        new Date().toLocaleTimeString();
+
+    const item =
+        document.createElement("div");
+
+    item.textContent =
+        time +
+        " — " +
+        signal +
+        " — " +
+        confidence +
+        "% — " +
+        strength;
+
+
+    if (
+        historyEl.textContent ===
+        "No signals yet."
+    ) {
+
+        historyEl.innerHTML = "";
+
+    }
+
+
+    historyEl.prepend(item);
+
+
+    while (
+        historyEl.children.length >
+        MAX_HISTORY
+    ) {
+
+        historyEl.removeChild(
+            historyEl.lastChild
+        );
+
+    }
+
+}
+
+
+/* =========================
+   START
+========================= */
+
+connect();
+
+</script>
+
+</body>
+    </html>
