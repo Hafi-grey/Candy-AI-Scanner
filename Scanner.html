@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>Rise/Fall Scanner</title>
+<title>Candy Rise/Fall Scanner</title>
 
 <style>
 body {
@@ -12,11 +12,11 @@ body {
     background: #111;
     color: white;
     text-align: center;
-    padding: 20px;
+    padding: 15px;
 }
 
 .box {
-    max-width: 400px;
+    max-width: 420px;
     margin: auto;
     background: #222;
     padding: 20px;
@@ -24,12 +24,14 @@ body {
 }
 
 h2 {
-    margin-bottom: 25px;
+    margin-bottom: 20px;
 }
 
-p {
-    font-size: 18px;
-    margin: 15px 0;
+.row {
+    background: #333;
+    padding: 12px;
+    margin: 8px 0;
+    border-radius: 8px;
 }
 
 .value {
@@ -37,9 +39,14 @@ p {
 }
 
 #signal {
-    font-size: 30px;
+    font-size: 32px;
     font-weight: bold;
     margin: 25px 0;
+}
+
+#reason {
+    font-size: 14px;
+    color: #ccc;
 }
 </style>
 </head>
@@ -48,44 +55,46 @@ p {
 
 <div class="box">
 
-<h2>📊 Rise/Fall Scanner</h2>
+<h2>🤖 Candy Rise/Fall Scanner</h2>
 
-<p>
+<div class="row">
 Status:
 <span id="status" class="value">Connecting...</span>
-</p>
+</div>
 
-<p>
+<div class="row">
 Live Price:
 <span id="price" class="value">Waiting...</span>
-</p>
+</div>
 
-<p>
-Last Digit:
-<span id="digit" class="value">-</span>
-</p>
-
-<p>
-Ticks:
+<div class="row">
+Ticks Collected:
 <span id="ticks" class="value">0</span>
-</p>
+</div>
 
-<p>
-Rise Count:
+<div class="row">
+Recent Movement:
+<span id="movement" class="value">Waiting...</span>
+</div>
+
+<div class="row">
+Rise:
 <span id="rise" class="value">0</span>
-</p>
+</div>
 
-<p>
-Fall Count:
+<div class="row">
+Fall:
 <span id="fall" class="value">0</span>
-</p>
+</div>
 
 <div id="signal">WAITING...</div>
 
-<p>
+<div class="row">
 Confidence:
 <span id="confidence" class="value">0%</span>
-</p>
+</div>
+
+<p id="reason">Collecting market data...</p>
 
 </div>
 
@@ -93,17 +102,18 @@ Confidence:
 
 const status = document.getElementById("status");
 const price = document.getElementById("price");
-const digit = document.getElementById("digit");
 const ticksDisplay = document.getElementById("ticks");
+const movementDisplay = document.getElementById("movement");
 const riseDisplay = document.getElementById("rise");
 const fallDisplay = document.getElementById("fall");
 const signal = document.getElementById("signal");
 const confidence = document.getElementById("confidence");
+const reason = document.getElementById("reason");
 
-let previousPrice = null;
-let ticks = 0;
-let riseCount = 0;
-let fallCount = 0;
+let prices = [];
+let tickCount = 0;
+
+const MAX_HISTORY = 20;
 
 const ws = new WebSocket(
     "wss://api.derivws.com/trading/v1/options/ws/public"
@@ -126,68 +136,153 @@ ws.onmessage = function(event) {
 
         const data = JSON.parse(event.data);
 
+        if (data.error) {
+            status.textContent = "API ERROR ❌";
+            reason.textContent = data.error.message;
+            return;
+        }
+
         if (!data.tick) return;
 
         const currentPrice = Number(data.tick.quote);
 
+        tickCount++;
+
         price.textContent = currentPrice;
+        ticksDisplay.textContent = tickCount;
 
-        ticks++;
+        prices.push(currentPrice);
 
-        ticksDisplay.textContent = ticks;
-
-        const lastDigit =
-            String(currentPrice)
-            .replace(".", "")
-            .slice(-1);
-
-        digit.textContent = lastDigit;
-
-        if (previousPrice !== null) {
-
-            if (currentPrice > previousPrice) {
-                riseCount++;
-            }
-
-            if (currentPrice < previousPrice) {
-                fallCount++;
-            }
-
-        }
-
-        previousPrice = currentPrice;
-
-        riseDisplay.textContent = riseCount;
-        fallDisplay.textContent = fallCount;
-
-        const total = riseCount + fallCount;
-
-        if (total >= 5) {
-
-            if (riseCount > fallCount) {
-
-                signal.textContent = "⬆️ RISE";
-                confidence.textContent =
-                    Math.round((riseCount / total) * 100) + "%";
-
-            } else if (fallCount > riseCount) {
-
-                signal.textContent = "⬇️ FALL";
-                confidence.textContent =
-                    Math.round((fallCount / total) * 100) + "%";
-
-            } else {
-
-                signal.textContent = "WAIT";
-                confidence.textContent = "50%";
-            }
+        if (prices.length > MAX_HISTORY) {
+            prices.shift();
         }
 
         status.textContent = "LIVE TICK 🟢";
 
-    } catch(error) {
+        /*
+        Need enough prices before creating
+        a signal.
+        */
 
-        console.log(error);
+        if (prices.length < 6) {
+
+            signal.textContent = "WAITING...";
+            confidence.textContent = "0%";
+            reason.textContent =
+                "Collecting more tick data...";
+
+            return;
+        }
+
+        let rise = 0;
+        let fall = 0;
+
+        for (let i = 1; i < prices.length; i++) {
+
+            if (prices[i] > prices[i - 1]) {
+                rise++;
+            }
+
+            if (prices[i] < prices[i - 1]) {
+                fall++;
+            }
+        }
+
+        riseDisplay.textContent = rise;
+        fallDisplay.textContent = fall;
+
+        /*
+        Recent movement
+        */
+
+        const first =
+            prices[prices.length - 6];
+
+        const last =
+            prices[prices.length - 1];
+
+        let movement;
+
+        if (last > first) {
+
+            movement = "UP 📈";
+
+        } else if (last < first) {
+
+            movement = "DOWN 📉";
+
+        } else {
+
+            movement = "FLAT ➖";
+        }
+
+        movementDisplay.textContent = movement;
+
+        /*
+        Calculate strength
+        */
+
+        const total = rise + fall;
+
+        let risePercent =
+            (rise / total) * 100;
+
+        let fallPercent =
+            (fall / total) * 100;
+
+        /*
+        Conservative signal
+        */
+
+        if (
+            risePercent >= 65 &&
+            last > first
+        ) {
+
+            signal.textContent = "⬆️ RISE";
+            confidence.textContent =
+                Math.round(risePercent) + "%";
+
+            reason.textContent =
+                "Recent ticks show stronger upward movement.";
+
+        }
+
+        else if (
+            fallPercent >= 65 &&
+            last < first
+        ) {
+
+            signal.textContent = "⬇️ FALL";
+            confidence.textContent =
+                Math.round(fallPercent) + "%";
+
+            reason.textContent =
+                "Recent ticks show stronger downward movement.";
+
+        }
+
+        else {
+
+            signal.textContent = "⏸ WAIT";
+            confidence.textContent =
+                Math.round(
+                    Math.max(risePercent, fallPercent)
+                ) + "%";
+
+            reason.textContent =
+                "Movement is not strong enough for a signal.";
+
+        }
+
+    }
+
+    catch(error) {
+
+        console.log(
+            "Reading error:",
+            error
+        );
 
     }
 
@@ -197,9 +292,12 @@ ws.onerror = function() {
 
     status.textContent = "ERROR ❌";
 
+    reason.textContent =
+        "WebSocket connection error.";
+
 };
 
-ws.onclose = function() {
+ws.onclose = function(event) {
 
     status.textContent = "CLOSED 🔴";
 
@@ -208,4 +306,4 @@ ws.onclose = function() {
 </script>
 
 </body>
-</html>
+    </html>
