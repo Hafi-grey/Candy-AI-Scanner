@@ -39,10 +39,13 @@ ws.onmessage = function (event) {
 
 };
 
-ws.onerror = function () {
-
+ws.onerror = function (event) {
     status.textContent = "ERROR ❌";
-    message.textContent = "WebSocket error";
+    message.textContent = "Error type: " + event.type;
+    console.log("WebSocket error:", event);
+};
+
+
 
 };
 
