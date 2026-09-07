@@ -1,5 +1,5 @@
 // ==========================================
-// CANDY AI - DERIV VOLATILITY SCANNER
+// CANDY AI - STRONGER RISE/FALL SCANNER
 // ==========================================
 
 const status = document.getElementById("status");
@@ -8,17 +8,12 @@ const signal = document.getElementById("signal");
 const confidence = document.getElementById("confidence");
 const strength = document.getElementById("strength");
 
-// ==========================================
-// SETTINGS
-// ==========================================
-
 const WINDOW = 30;
 const MIN_CONFIDENCE = 60;
 
 let ws = null;
 let symbols = [];
 let selectedSymbol = null;
-let reconnectTimer = null;
 
 const marketData = {};
 
@@ -35,34 +30,26 @@ controls.style.background = "#222";
 controls.style.color = "white";
 
 controls.innerHTML = `
-    <label style="
-        display:block;
-        margin-bottom:8px;
-        font-weight:bold;
-    ">
-        Select Volatility Market
-    </label>
+<label style="display:block;margin-bottom:8px;font-weight:bold;">
+Select Volatility Market
+</label>
 
-    <select id="marketSelect"
-        style="
-        width:100%;
-        padding:12px;
-        border-radius:8px;
-        font-size:16px;
-        background:#111;
-        color:white;
-        border:1px solid #555;
-        ">
-        <option>Loading markets...</option>
-    </select>
+<select id="marketSelect"
+style="
+width:100%;
+padding:12px;
+border-radius:8px;
+font-size:16px;
+background:#111;
+color:white;
+border:1px solid #555;">
+<option>Loading markets...</option>
+</select>
 
-    <div id="marketCount"
-        style="
-        margin-top:8px;
-        font-size:13px;
-        ">
-        Connecting to Deriv...
-    </div>
+<div id="marketCount"
+style="margin-top:8px;font-size:13px;">
+Connecting...
+</div>
 `;
 
 document.body.insertBefore(
@@ -82,98 +69,54 @@ const marketCount =
 
 function connect() {
 
-    if (
-        ws &&
-        (
-            ws.readyState === WebSocket.OPEN ||
-            ws.readyState === WebSocket.CONNECTING
-        )
-    ) {
-        return;
-    }
-
     status.textContent =
-        "CONNECTING TO DERIV...";
-
-    strength.textContent =
-        "Opening market connection...";
+        "CONNECTING...";
 
     ws = new WebSocket(
         "wss://api.derivws.com/trading/v1/options/ws/public"
     );
 
-    // ======================================
-    // OPEN
-    // ======================================
-
     ws.onopen = function () {
-
-        console.log("DERIV CONNECTED");
 
         status.textContent =
             "CONNECTED 🟢";
 
-        marketCount.textContent =
-            "Requesting Volatility markets...";
-
-        // Current Deriv API active-symbol request
         ws.send(JSON.stringify({
             active_symbols: "brief",
             req_id: 1
         }));
     };
 
-    // ======================================
-    // MESSAGE
-    // ======================================
-
     ws.onmessage = function(event) {
 
         let data;
 
         try {
-
             data = JSON.parse(event.data);
-
-        } catch (error) {
-
-            console.error(
-                "Invalid Deriv message:",
-                event.data
-            );
-
+        } catch {
             return;
         }
 
         console.log("DERIV:", data);
 
-        // ====================================
+        // ==================================
         // ERROR
-        // ====================================
+        // ==================================
 
         if (data.error) {
-
-            console.error(
-                "DERIV API ERROR:",
-                data.error
-            );
 
             status.textContent =
                 "API ERROR ❌";
 
             signal.textContent =
-                data.error.message ||
-                "Deriv API error";
-
-            strength.textContent =
-                "Request rejected";
+                data.error.message;
 
             return;
         }
 
-        // ====================================
-        // ACTIVE SYMBOLS
-        // ====================================
+        // ==================================
+        // MARKETS
+        // ==================================
 
         if (
             data.msg_type === "active_symbols" &&
@@ -181,98 +124,51 @@ function connect() {
         ) {
 
             symbols = data.active_symbols
+                .map(item => ({
+                    symbol:
+                        item.underlying_symbol ||
+                        item.symbol,
 
-                .map(item => {
-
-                    return {
-
-                        symbol:
-                            item.underlying_symbol,
-
-                        name:
-                            item.underlying_symbol_name,
-
-                        market:
-                            item.market,
-
-                        submarket:
-                            item.submarket
-                    };
-
-                })
-
+                    name:
+                        item.underlying_symbol_name ||
+                        item.display_name ||
+                        item.symbol
+                }))
                 .filter(item => {
 
-                    if (!item.symbol) {
-                        return false;
-                    }
-
-                    const text =
-                        (
-                            item.name +
-                            " " +
-                            item.symbol +
-                            " " +
-                            item.market +
-                            " " +
-                            item.submarket
-                        ).toLowerCase();
-
                     return (
-                        text.includes("volatility") ||
-                        /[0-9]+hz[0-9]+v/i.test(
-                            item.symbol
+                        /volatility/i.test(
+                            item.name
                         ) ||
-                        /r_[0-9]+/i.test(
+                        /R_[0-9]+/i.test(
                             item.symbol
-                        );
-                    });
+                        )
+                    );
+                });
 
-            // Remove duplicates
             const unique = {};
 
             symbols.forEach(item => {
-
                 unique[item.symbol] = item;
             });
 
             symbols =
                 Object.values(unique);
 
-            symbols.sort((a, b) =>
+            symbols.sort((a,b) =>
                 a.name.localeCompare(b.name)
             );
 
-            console.log(
-                "VOLATILITY SYMBOLS:",
-                symbols
-            );
-
-            if (symbols.length === 0) {
+            if (!symbols.length) {
 
                 status.textContent =
-                    "NO VOLATILITY MARKETS ❌";
-
-                marketCount.textContent =
-                    "No Volatility symbols returned.";
-
-                strength.textContent =
-                    "Check the Deriv response.";
+                    "NO MARKETS ❌";
 
                 return;
             }
 
-            // Build selector
             buildMarketList();
 
-            // Select first market
-            selectedSymbol =
-                symbols[0].symbol;
-
-            marketSelect.value =
-                selectedSymbol;
-
-            // Prepare data
             symbols.forEach(item => {
 
                 marketData[item.symbol] = {
@@ -287,19 +183,20 @@ function connect() {
 
                     ticks: 0
                 };
-
             });
 
-            // Subscribe ONLY to selected market
+            selectedSymbol =
+                symbols[0].symbol;
+
+            marketSelect.value =
+                selectedSymbol;
+
             subscribeToMarket(
                 selectedSymbol
             );
 
             status.textContent =
-                "LIVE VOLATILITY DATA 🟢";
-
-            strength.textContent =
-                "Waiting for ticks...";
+                "LIVE TICK 🟢";
 
             marketCount.textContent =
                 symbols.length +
@@ -308,9 +205,9 @@ function connect() {
             updateDisplay();
         }
 
-        // ====================================
-        // TICK
-        // ====================================
+        // ==================================
+        // LIVE TICK
+        // ==================================
 
         if (
             data.msg_type === "tick" &&
@@ -338,56 +235,26 @@ function connect() {
         }
     };
 
-    // ======================================
-    // ERROR
-    // ======================================
-
-    ws.onerror = function(error) {
-
-        console.error(
-            "WebSocket error:",
-            error
-        );
+    ws.onerror = function() {
 
         status.textContent =
             "WEBSOCKET ERROR ❌";
-
-        strength.textContent =
-            "Connection problem";
     };
 
-    // ======================================
-    // CLOSED
-    // ======================================
-
-    ws.onclose = function(event) {
-
-        console.log(
-            "WebSocket closed:",
-            event.code,
-            event.reason
-        );
+    ws.onclose = function() {
 
         status.textContent =
             "CONNECTION CLOSED 🔴";
 
-        strength.textContent =
-            "Reconnecting...";
-
-        clearTimeout(
-            reconnectTimer
+        setTimeout(
+            connect,
+            3000
         );
-
-        reconnectTimer =
-            setTimeout(
-                connect,
-                3000
-            );
     };
 }
 
 // ==========================================
-// SUBSCRIBE TO MARKET
+// SUBSCRIBE
 // ==========================================
 
 function subscribeToMarket(symbol) {
@@ -399,11 +266,6 @@ function subscribeToMarket(symbol) {
         return;
     }
 
-    console.log(
-        "SUBSCRIBING TO:",
-        symbol
-    );
-
     ws.send(JSON.stringify({
 
         ticks: symbol,
@@ -414,18 +276,11 @@ function subscribeToMarket(symbol) {
             Math.floor(
                 Math.random() * 1000000
             )
-
     }));
-
-    status.textContent =
-        "SUBSCRIBED 🟢";
-
-    strength.textContent =
-        "Receiving market data...";
 }
 
 // ==========================================
-// BUILD MARKET LIST
+// BUILD LIST
 // ==========================================
 
 function buildMarketList() {
@@ -455,7 +310,7 @@ function buildMarketList() {
 }
 
 // ==========================================
-// MARKET CHANGED
+// CHANGE MARKET
 // ==========================================
 
 marketSelect.addEventListener(
@@ -465,18 +320,11 @@ marketSelect.addEventListener(
         selectedSymbol =
             this.value;
 
-        console.log(
-            "Selected:",
-            selectedSymbol
-        );
-
-        resetMainDisplay();
+        resetDisplay();
 
         subscribeToMarket(
             selectedSymbol
         );
-
-        updateDisplay();
     }
 );
 
@@ -508,7 +356,6 @@ function processTick(
     const data =
         marketData[symbol];
 
-    // Compare price
     if (
         data.lastPrice !== null
     ) {
@@ -538,7 +385,6 @@ function processTick(
 
     data.ticks++;
 
-    // Keep latest 30 prices
     if (
         data.prices.length >
         WINDOW
@@ -546,12 +392,11 @@ function processTick(
 
         data.prices.shift();
 
-        recalculateCounts(
+        recalculate(
             data
         );
     }
 
-    // Update screen
     if (
         symbol === selectedSymbol
     ) {
@@ -561,10 +406,10 @@ function processTick(
 }
 
 // ==========================================
-// RECALCULATE
+// RECALCULATE WINDOW
 // ==========================================
 
-function recalculateCounts(data) {
+function recalculate(data) {
 
     data.rise = 0;
     data.fall = 0;
@@ -593,14 +438,10 @@ function recalculateCounts(data) {
 }
 
 // ==========================================
-// UPDATE DISPLAY
+// SIGNAL ENGINE
 // ==========================================
 
 function updateDisplay() {
-
-    if (!selectedSymbol) {
-        return;
-    }
 
     const data =
         marketData[selectedSymbol];
@@ -617,10 +458,10 @@ function updateDisplay() {
             "WAIT ⏳";
 
         confidence.textContent =
-            "Collecting";
+            "0%";
 
         strength.textContent =
-            "Waiting for ticks";
+            "Collecting data";
 
         return;
     }
@@ -632,111 +473,123 @@ function updateDisplay() {
     tick.textContent =
         data.lastPrice;
 
-    // Need enough movement
-    if (total < 5) {
+    if (total < 10) {
 
         signal.textContent =
             "WAIT ⏳";
 
         confidence.textContent =
-            Math.round(
-                total > 0
-                    ? Math.max(
-                        (data.rise / total) * 100,
-                        (data.fall / total) * 100
-                    )
-                    : 50
-            ) + "%";
+            "Collecting";
 
         strength.textContent =
-            "Collecting | Rise: " +
-            data.rise +
-            " | Fall: " +
-            data.fall +
-            " | Ticks: " +
-            data.ticks;
+            "Need more movement";
 
         return;
     }
 
-    const risePercent =
-        (
-            data.rise /
-            total
-        ) * 100;
+    const rise =
+        (data.rise / total) * 100;
 
-    const fallPercent =
-        (
-            data.fall /
-            total
-        ) * 100;
+    const fall =
+        (data.fall / total) * 100;
 
-    let currentSignal =
-        "WAIT ⏳";
-
-    let currentConfidence =
+    const confidenceValue =
         Math.round(
             Math.max(
-                risePercent,
-                fallPercent
+                rise,
+                fall
             )
         );
 
-    // ======================================
-    // SIGNAL
-    // ======================================
+    let finalSignal =
+        "WAIT ⏳";
 
-    if (
-        risePercent >= MIN_CONFIDENCE &&
-        risePercent > fallPercent
-    ) {
-
-        currentSignal =
-            "⬆️ RISE";
-
-    } else if (
-        fallPercent >= MIN_CONFIDENCE &&
-        fallPercent > risePercent
-    ) {
-
-        currentSignal =
-            "⬇️ FALL";
-    }
-
-    // ======================================
-    // STRENGTH
-    // ======================================
-
-    let currentStrength =
+    let finalStrength =
         "WEAK";
 
+    // ==================================
+    // STRICT SIGNAL
+    // ==================================
+
     if (
-        currentConfidence >= 75
+        rise >= 75 &&
+        rise > fall
     ) {
 
-        currentStrength =
+        finalSignal =
+            "⬆️ STRONG RISE";
+
+        finalStrength =
             "STRONG";
 
     } else if (
-        currentConfidence >= 65
+        fall >= 75 &&
+        fall > rise
     ) {
 
-        currentStrength =
+        finalSignal =
+            "⬇️ STRONG FALL";
+
+        finalStrength =
+            "STRONG";
+
+    } else if (
+        rise >= 65 &&
+        rise > fall
+    ) {
+
+        finalSignal =
+            "⬆️ RISE";
+
+        finalStrength =
             "MEDIUM";
+
+    } else if (
+        fall >= 65 &&
+        fall > rise
+    ) {
+
+        finalSignal =
+            "⬇️ FALL";
+
+        finalStrength =
+            "MEDIUM";
+
+    } else if (
+        rise >= 60 &&
+        rise > fall
+    ) {
+
+        finalSignal =
+            "⬆️ WATCH RISE";
+
+        finalStrength =
+            "WEAK";
+
+    } else if (
+        fall >= 60 &&
+        fall > rise
+    ) {
+
+        finalSignal =
+            "⬇️ WATCH FALL";
+
+        finalStrength =
+            "WEAK";
     }
 
-    // ======================================
+    // ==================================
     // DISPLAY
-    // ======================================
-
-    signal.textContent =
-        currentSignal;
+    // ==================================
 
     confidence.textContent =
-        currentConfidence + "%";
+        confidenceValue + "%";
+
+    signal.textContent =
+        finalSignal;
 
     strength.textContent =
-        currentStrength +
+        finalStrength +
         " | Rise: " +
         data.rise +
         " | Fall: " +
@@ -749,7 +602,7 @@ function updateDisplay() {
 // RESET
 // ==========================================
 
-function resetMainDisplay() {
+function resetDisplay() {
 
     tick.textContent =
         "Loading...";
@@ -761,7 +614,7 @@ function resetMainDisplay() {
         "Collecting";
 
     strength.textContent =
-        "Loading selected market...";
+        "Loading...";
 }
 
 // ==========================================
