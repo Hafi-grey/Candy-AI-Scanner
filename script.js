@@ -1,5 +1,5 @@
 // ==========================================
-// CANDY AI - STRONGER RISE/FALL SCANNER
+// CANDY AI - MULTI-TIMEFRAME RISE/FALL SCANNER
 // ==========================================
 
 const status = document.getElementById("status");
@@ -8,8 +8,10 @@ const signal = document.getElementById("signal");
 const confidence = document.getElementById("confidence");
 const strength = document.getElementById("strength");
 
-const WINDOW = 30;
 const MIN_CONFIDENCE = 60;
+
+// Default = 1 minute
+let timeframe = "1m";
 
 let ws = null;
 let symbols = [];
@@ -18,7 +20,7 @@ let selectedSymbol = null;
 const marketData = {};
 
 // ==========================================
-// MARKET SELECTOR
+// CONTROLS
 // ==========================================
 
 const controls = document.createElement("div");
@@ -30,26 +32,59 @@ controls.style.background = "#222";
 controls.style.color = "white";
 
 controls.innerHTML = `
-<label style="display:block;margin-bottom:8px;font-weight:bold;">
-Select Volatility Market
-</label>
+    <label style="
+        display:block;
+        margin-bottom:8px;
+        font-weight:bold;
+    ">
+        Select Volatility Market
+    </label>
 
-<select id="marketSelect"
-style="
-width:100%;
-padding:12px;
-border-radius:8px;
-font-size:16px;
-background:#111;
-color:white;
-border:1px solid #555;">
-<option>Loading markets...</option>
-</select>
+    <select id="marketSelect"
+        style="
+        width:100%;
+        padding:12px;
+        border-radius:8px;
+        font-size:16px;
+        background:#111;
+        color:white;
+        border:1px solid #555;
+        ">
+        <option>Loading markets...</option>
+    </select>
 
-<div id="marketCount"
-style="margin-top:8px;font-size:13px;">
-Connecting...
-</div>
+    <label style="
+        display:block;
+        margin-top:14px;
+        margin-bottom:8px;
+        font-weight:bold;
+    ">
+        Scanner Timeframe
+    </label>
+
+    <select id="timeframeSelect"
+        style="
+        width:100%;
+        padding:12px;
+        border-radius:8px;
+        font-size:16px;
+        background:#111;
+        color:white;
+        border:1px solid #555;
+        ">
+        <option value="1m">1 MINUTE</option>
+        <option value="5m">5 MINUTES</option>
+        <option value="15m">15 MINUTES</option>
+        <option value="ticks">TICKS</option>
+    </select>
+
+    <div id="marketCount"
+        style="
+        margin-top:10px;
+        font-size:13px;
+        ">
+        Connecting to Deriv...
+    </div>
 `;
 
 document.body.insertBefore(
@@ -60,17 +95,36 @@ document.body.insertBefore(
 const marketSelect =
     document.getElementById("marketSelect");
 
+const timeframeSelect =
+    document.getElementById("timeframeSelect");
+
 const marketCount =
     document.getElementById("marketCount");
 
 // ==========================================
-// CONNECT
+// TIMEFRAME CHANGE
+// ==========================================
+
+timeframeSelect.addEventListener(
+    "change",
+    function () {
+
+        timeframe = this.value;
+
+        resetDisplay();
+
+        updateDisplay();
+    }
+);
+
+// ==========================================
+// CONNECT TO DERIV
 // ==========================================
 
 function connect() {
 
     status.textContent =
-        "CONNECTING...";
+        "CONNECTING TO DERIV...";
 
     ws = new WebSocket(
         "wss://api.derivws.com/trading/v1/options/ws/public"
@@ -78,8 +132,15 @@ function connect() {
 
     ws.onopen = function () {
 
+        console.log(
+            "DERIV CONNECTED"
+        );
+
         status.textContent =
             "CONNECTED 🟢";
+
+        marketCount.textContent =
+            "Finding Volatility markets...";
 
         ws.send(JSON.stringify({
             active_symbols: "brief",
@@ -92,48 +153,73 @@ function connect() {
         let data;
 
         try {
-            data = JSON.parse(event.data);
+
+            data = JSON.parse(
+                event.data
+            );
+
         } catch {
+
             return;
         }
 
-        console.log("DERIV:", data);
+        console.log(
+            "DERIV:",
+            data
+        );
 
         // ==================================
-        // ERROR
+        // API ERROR
         // ==================================
 
         if (data.error) {
+
+            console.error(
+                "Deriv error:",
+                data.error
+            );
 
             status.textContent =
                 "API ERROR ❌";
 
             signal.textContent =
-                data.error.message;
+                data.error.message ||
+                "API error";
+
+            strength.textContent =
+                "Request rejected";
 
             return;
         }
 
         // ==================================
-        // MARKETS
+        // ACTIVE SYMBOLS
         // ==================================
 
         if (
             data.msg_type === "active_symbols" &&
-            Array.isArray(data.active_symbols)
+            Array.isArray(
+                data.active_symbols
+            )
         ) {
 
-            symbols = data.active_symbols
-                .map(item => ({
-                    symbol:
-                        item.underlying_symbol ||
-                        item.symbol,
+            symbols =
+                data.active_symbols
+                .map(item => {
 
-                    name:
-                        item.underlying_symbol_name ||
-                        item.display_name ||
-                        item.symbol
-                }))
+                    return {
+
+                        symbol:
+                            item.underlying_symbol ||
+                            item.symbol,
+
+                        name:
+                            item.underlying_symbol_name ||
+                            item.display_name ||
+                            item.symbol
+                    };
+
+                })
                 .filter(item => {
 
                     return (
@@ -146,34 +232,51 @@ function connect() {
                     );
                 });
 
+            // Remove duplicates
             const unique = {};
 
             symbols.forEach(item => {
-                unique[item.symbol] = item;
+
+                unique[
+                    item.symbol
+                ] = item;
+
             });
 
             symbols =
-                Object.values(unique);
+                Object.values(
+                    unique
+                );
 
-            symbols.sort((a,b) =>
-                a.name.localeCompare(b.name)
+            symbols.sort(
+                (a, b) =>
+                    a.name.localeCompare(
+                        b.name
+                    )
             );
 
-            if (!symbols.length) {
+            if (
+                symbols.length === 0
+            ) {
 
                 status.textContent =
-                    "NO MARKETS ❌";
+                    "NO VOLATILITY MARKETS ❌";
 
                 return;
             }
 
             buildMarketList();
 
+            // Create data containers
             symbols.forEach(item => {
 
-                marketData[item.symbol] = {
+                marketData[
+                    item.symbol
+                ] = {
 
                     prices: [],
+
+                    times: [],
 
                     rise: 0,
 
@@ -181,7 +284,11 @@ function connect() {
 
                     lastPrice: null,
 
-                    ticks: 0
+                    lastTime: null,
+
+                    ticks: 0,
+
+                    candles: []
                 };
             });
 
@@ -219,7 +326,14 @@ function connect() {
                 data.tick.symbol;
 
             const price =
-                Number(data.tick.quote);
+                Number(
+                    data.tick.quote
+                );
+
+            const epoch =
+                Number(
+                    data.tick.epoch
+                );
 
             if (
                 !symbol ||
@@ -230,21 +344,35 @@ function connect() {
 
             processTick(
                 symbol,
-                price
+                price,
+                Number.isFinite(epoch)
+                    ? epoch
+                    : Date.now() / 1000
             );
         }
     };
 
-    ws.onerror = function() {
+    ws.onerror = function(error) {
+
+        console.error(
+            "WebSocket error:",
+            error
+        );
 
         status.textContent =
             "WEBSOCKET ERROR ❌";
+
+        strength.textContent =
+            "Connection problem";
     };
 
     ws.onclose = function() {
 
         status.textContent =
             "CONNECTION CLOSED 🔴";
+
+        strength.textContent =
+            "Reconnecting...";
 
         setTimeout(
             connect,
@@ -266,6 +394,11 @@ function subscribeToMarket(symbol) {
         return;
     }
 
+    console.log(
+        "SUBSCRIBING:",
+        symbol
+    );
+
     ws.send(JSON.stringify({
 
         ticks: symbol,
@@ -274,13 +407,14 @@ function subscribeToMarket(symbol) {
 
         req_id:
             Math.floor(
-                Math.random() * 1000000
+                Math.random() *
+                1000000
             )
     }));
 }
 
 // ==========================================
-// BUILD LIST
+// MARKET LIST
 // ==========================================
 
 function buildMarketList() {
@@ -310,12 +444,12 @@ function buildMarketList() {
 }
 
 // ==========================================
-// CHANGE MARKET
+// MARKET CHANGE
 // ==========================================
 
 marketSelect.addEventListener(
     "change",
-    function() {
+    function () {
 
         selectedSymbol =
             this.value;
@@ -334,7 +468,8 @@ marketSelect.addEventListener(
 
 function processTick(
     symbol,
-    price
+    price,
+    epoch
 ) {
 
     if (!marketData[symbol]) {
@@ -342,19 +477,22 @@ function processTick(
         marketData[symbol] = {
 
             prices: [],
-
+            times: [],
             rise: 0,
-
             fall: 0,
-
             lastPrice: null,
-
-            ticks: 0
+            lastTime: null,
+            ticks: 0,
+            candles: []
         };
     }
 
     const data =
         marketData[symbol];
+
+    // ------------------------------
+    // Tick movement
+    // ------------------------------
 
     if (
         data.lastPrice !== null
@@ -379,23 +517,34 @@ function processTick(
     data.lastPrice =
         price;
 
+    data.lastTime =
+        epoch;
+
     data.prices.push(
         price
     );
 
+    data.times.push(
+        epoch
+    );
+
     data.ticks++;
 
+    // Keep tick history
     if (
-        data.prices.length >
-        WINDOW
+        data.prices.length > 500
     ) {
 
         data.prices.shift();
-
-        recalculate(
-            data
-        );
+        data.times.shift();
     }
+
+    // Build minute candles
+    buildCandle(
+        data,
+        price,
+        epoch
+    );
 
     if (
         symbol === selectedSymbol
@@ -406,42 +555,330 @@ function processTick(
 }
 
 // ==========================================
-// RECALCULATE WINDOW
+// BUILD CANDLES FROM LIVE TICKS
 // ==========================================
 
-function recalculate(data) {
+function buildCandle(
+    data,
+    price,
+    epoch
+) {
 
-    data.rise = 0;
-    data.fall = 0;
+    // Unix minute
+    const minute =
+        Math.floor(
+            epoch / 60
+        ) * 60;
 
-    for (
-        let i = 1;
-        i < data.prices.length;
-        i++
+    let candle =
+        data.candles[
+            data.candles.length - 1
+        ];
+
+    // New minute
+    if (
+        !candle ||
+        candle.time !== minute
     ) {
 
-        if (
-            data.prices[i] >
-            data.prices[i - 1]
-        ) {
+        candle = {
 
-            data.rise++;
+            time: minute,
 
-        } else if (
-            data.prices[i] <
-            data.prices[i - 1]
-        ) {
+            open: price,
 
-            data.fall++;
-        }
+            high: price,
+
+            low: price,
+
+            close: price
+        };
+
+        data.candles.push(
+            candle
+        );
+
+    } else {
+
+        candle.high =
+            Math.max(
+                candle.high,
+                price
+            );
+
+        candle.low =
+            Math.min(
+                candle.low,
+                price
+            );
+
+        candle.close =
+            price;
     }
+
+    // Keep recent candles
+    if (
+        data.candles.length > 60
+    ) {
+
+        data.candles.shift();
+    }
+}
+
+// ==========================================
+// TICK SIGNAL
+// ==========================================
+
+function calculateTickSignal(data) {
+
+    const total =
+        data.rise +
+        data.fall;
+
+    if (total < 10) {
+
+        return {
+
+            signal: "WAIT ⏳",
+
+            confidence: 0,
+
+            strength: "COLLECTING"
+        };
+    }
+
+    const rise =
+        (data.rise / total) *
+        100;
+
+    const fall =
+        (data.fall / total) *
+        100;
+
+    return makeSignal(
+        rise,
+        fall
+    );
+}
+
+// ==========================================
+// MINUTE SIGNAL
+// ==========================================
+
+function calculateMinuteSignal(
+    data,
+    minutes
+) {
+
+    const required =
+        minutes + 1;
+
+    if (
+        data.candles.length <
+        required
+    ) {
+
+        return {
+
+            signal: "WAIT ⏳",
+
+            confidence: 0,
+
+            strength:
+                "COLLECTING CANDLES"
+        };
+    }
+
+    // Use completed candles.
+    // The current candle is excluded.
+    const completed =
+        data.candles.slice(
+            0,
+            -1
+        );
+
+    const selected =
+        completed.slice(
+            -minutes
+        );
+
+    if (
+        selected.length < minutes
+    ) {
+
+        return {
+
+            signal: "WAIT ⏳",
+
+            confidence: 0,
+
+            strength:
+                "COLLECTING CANDLES"
+        };
+    }
+
+    let bullish = 0;
+    let bearish = 0;
+
+    selected.forEach(
+        candle => {
+
+            if (
+                candle.close >
+                candle.open
+            ) {
+
+                bullish++;
+
+            } else if (
+                candle.close <
+                candle.open
+            ) {
+
+                bearish++;
+            }
+        }
+    );
+
+    const total =
+        bullish +
+        bearish;
+
+    if (total === 0) {
+
+        return {
+
+            signal: "WAIT ⏳",
+
+            confidence: 50,
+
+            strength: "WEAK"
+        };
+    }
+
+    const rise =
+        (bullish / total) *
+        100;
+
+    const fall =
+        (bearish / total) *
+        100;
+
+    return makeSignal(
+        rise,
+        fall
+    );
 }
 
 // ==========================================
 // SIGNAL ENGINE
 // ==========================================
 
+function makeSignal(
+    rise,
+    fall
+) {
+
+    const confidence =
+        Math.round(
+            Math.max(
+                rise,
+                fall
+            )
+        );
+
+    let signal =
+        "WAIT ⏳";
+
+    let strength =
+        "WEAK";
+
+    if (
+        rise >= 75 &&
+        rise > fall
+    ) {
+
+        signal =
+            "⬆️ STRONG RISE";
+
+        strength =
+            "STRONG";
+
+    } else if (
+        fall >= 75 &&
+        fall > rise
+    ) {
+
+        signal =
+            "⬇️ STRONG FALL";
+
+        strength =
+            "STRONG";
+
+    } else if (
+        rise >= 65 &&
+        rise > fall
+    ) {
+
+        signal =
+            "⬆️ RISE";
+
+        strength =
+            "MEDIUM";
+
+    } else if (
+        fall >= 65 &&
+        fall > rise
+    ) {
+
+        signal =
+            "⬇️ FALL";
+
+        strength =
+            "MEDIUM";
+
+    } else if (
+        rise >= MIN_CONFIDENCE &&
+        rise > fall
+    ) {
+
+        signal =
+            "⬆️ WATCH RISE";
+
+        strength =
+            "WEAK";
+
+    } else if (
+        fall >= MIN_CONFIDENCE &&
+        fall > rise
+    ) {
+
+        signal =
+            "⬇️ WATCH FALL";
+
+        strength =
+            "WEAK";
+    }
+
+    return {
+
+        signal,
+
+        confidence,
+
+        strength
+    };
+}
+
+// ==========================================
+// DISPLAY
+// ==========================================
+
 function updateDisplay() {
+
+    if (!selectedSymbol) {
+        return;
+    }
 
     const data =
         marketData[selectedSymbol];
@@ -451,151 +888,87 @@ function updateDisplay() {
         data.lastPrice === null
     ) {
 
-        tick.textContent =
-            "Waiting...";
-
-        signal.textContent =
-            "WAIT ⏳";
-
-        confidence.textContent =
-            "0%";
-
-        strength.textContent =
-            "Collecting data";
+        resetDisplay();
 
         return;
     }
-
-    const total =
-        data.rise +
-        data.fall;
 
     tick.textContent =
         data.lastPrice;
 
-    if (total < 10) {
+    let result;
 
-        signal.textContent =
-            "WAIT ⏳";
+    // ======================================
+    // TICKS MODE
+    // ======================================
+
+    if (
+        timeframe === "ticks"
+    ) {
+
+        result =
+            calculateTickSignal(
+                data
+            );
 
         confidence.textContent =
-            "Collecting";
+            result.confidence
+                ? result.confidence + "%"
+                : "Collecting";
+
+        signal.textContent =
+            result.signal;
 
         strength.textContent =
-            "Need more movement";
+            result.strength +
+            " | Rise: " +
+            data.rise +
+            " | Fall: " +
+            data.fall +
+            " | Ticks: " +
+            data.ticks;
 
         return;
     }
 
-    const rise =
-        (data.rise / total) * 100;
+    // ======================================
+    // MINUTE MODES
+    // ======================================
 
-    const fall =
-        (data.fall / total) * 100;
-
-    const confidenceValue =
-        Math.round(
-            Math.max(
-                rise,
-                fall
-            )
-        );
-
-    let finalSignal =
-        "WAIT ⏳";
-
-    let finalStrength =
-        "WEAK";
-
-    // ==================================
-    // STRICT SIGNAL
-    // ==================================
+    let minutes = 1;
 
     if (
-        rise >= 75 &&
-        rise > fall
+        timeframe === "5m"
     ) {
-
-        finalSignal =
-            "⬆️ STRONG RISE";
-
-        finalStrength =
-            "STRONG";
-
-    } else if (
-        fall >= 75 &&
-        fall > rise
-    ) {
-
-        finalSignal =
-            "⬇️ STRONG FALL";
-
-        finalStrength =
-            "STRONG";
-
-    } else if (
-        rise >= 65 &&
-        rise > fall
-    ) {
-
-        finalSignal =
-            "⬆️ RISE";
-
-        finalStrength =
-            "MEDIUM";
-
-    } else if (
-        fall >= 65 &&
-        fall > rise
-    ) {
-
-        finalSignal =
-            "⬇️ FALL";
-
-        finalStrength =
-            "MEDIUM";
-
-    } else if (
-        rise >= 60 &&
-        rise > fall
-    ) {
-
-        finalSignal =
-            "⬆️ WATCH RISE";
-
-        finalStrength =
-            "WEAK";
-
-    } else if (
-        fall >= 60 &&
-        fall > rise
-    ) {
-
-        finalSignal =
-            "⬇️ WATCH FALL";
-
-        finalStrength =
-            "WEAK";
+        minutes = 5;
     }
 
-    // ==================================
-    // DISPLAY
-    // ==================================
+    if (
+        timeframe === "15m"
+    ) {
+        minutes = 15;
+    }
 
-    confidence.textContent =
-        confidenceValue + "%";
+    result =
+        calculateMinuteSignal(
+            data,
+            minutes
+        );
 
     signal.textContent =
-        finalSignal;
+        result.signal;
+
+    confidence.textContent =
+        result.confidence
+            ? result.confidence + "%"
+            : "Collecting";
 
     strength.textContent =
-        finalStrength +
-        " | Rise: " +
-        data.rise +
-        " | Fall: " +
-        data.fall +
-        " | Ticks: " +
-        data.ticks;
+        result.strength +
+        " | " +
+        timeframe.toUpperCase() +
+        " | Candles: " +
+        data.candles.length;
 }
 
 // ==========================================
@@ -614,11 +987,14 @@ function resetDisplay() {
         "Collecting";
 
     strength.textContent =
-        "Loading...";
+        "Collecting market data...";
 }
 
 // ==========================================
 // START
 // ==========================================
+
+timeframeSelect.value =
+    "1m";
 
 connect();
