@@ -8,26 +8,23 @@ const signal = document.getElementById("signal");
 const confidence = document.getElementById("confidence");
 const strength = document.getElementById("strength");
 
-// -------------------------------
-// Scanner settings
-// -------------------------------
+// ==========================================
+// SETTINGS
+// ==========================================
 
 const WINDOW = 30;
 const MIN_CONFIDENCE = 60;
 
-// -------------------------------
-// Scanner data
-// -------------------------------
-
+let ws = null;
 let symbols = [];
 let selectedSymbol = null;
-let ws = null;
+let reconnectTimer = null;
 
 const marketData = {};
 
-// -------------------------------
-// Create market selector
-// -------------------------------
+// ==========================================
+// MARKET SELECTOR
+// ==========================================
 
 const controls = document.createElement("div");
 
@@ -38,7 +35,11 @@ controls.style.background = "#222";
 controls.style.color = "white";
 
 controls.innerHTML = `
-    <label style="display:block;margin-bottom:8px;font-weight:bold;">
+    <label style="
+        display:block;
+        margin-bottom:8px;
+        font-weight:bold;
+    ">
         Select Volatility Market
     </label>
 
@@ -50,80 +51,129 @@ controls.innerHTML = `
         font-size:16px;
         background:#111;
         color:white;
-        border:1px solid #555;">
+        border:1px solid #555;
+        ">
         <option>Loading markets...</option>
     </select>
 
     <div id="marketCount"
-        style="margin-top:8px;font-size:13px;">
-        Searching Deriv markets...
+        style="
+        margin-top:8px;
+        font-size:13px;
+        ">
+        Connecting to Deriv...
     </div>
 `;
 
-document.body.insertBefore(controls, document.body.firstChild);
+document.body.insertBefore(
+    controls,
+    document.body.firstChild
+);
 
-const marketSelect = document.getElementById("marketSelect");
-const marketCount = document.getElementById("marketCount");
+const marketSelect =
+    document.getElementById("marketSelect");
 
-// -------------------------------
-// Connect to Deriv
-// -------------------------------
+const marketCount =
+    document.getElementById("marketCount");
+
+// ==========================================
+// CONNECT
+// ==========================================
 
 function connect() {
 
-    status.textContent = "Connecting to Deriv...";
+    if (
+        ws &&
+        (
+            ws.readyState === WebSocket.OPEN ||
+            ws.readyState === WebSocket.CONNECTING
+        )
+    ) {
+        return;
+    }
+
+    status.textContent =
+        "CONNECTING TO DERIV...";
+
+    strength.textContent =
+        "Opening market connection...";
 
     ws = new WebSocket(
         "wss://api.derivws.com/trading/v1/options/ws/public"
     );
 
+    // ======================================
+    // OPEN
+    // ======================================
+
     ws.onopen = function () {
 
         console.log("DERIV CONNECTED");
 
-        status.textContent = "CONNECTED 🟢";
-        strength.textContent = "Finding Volatility markets...";
+        status.textContent =
+            "CONNECTED 🟢";
 
-        // Ask Deriv for currently active symbols
+        marketCount.textContent =
+            "Requesting Volatility markets...";
+
+        // Current Deriv API active-symbol request
         ws.send(JSON.stringify({
             active_symbols: "brief",
             req_id: 1
         }));
     };
 
-    ws.onmessage = function (event) {
+    // ======================================
+    // MESSAGE
+    // ======================================
 
-        console.log("DERIV:", event.data);
+    ws.onmessage = function(event) {
 
         let data;
 
         try {
+
             data = JSON.parse(event.data);
+
         } catch (error) {
-            console.log("Invalid JSON:", event.data);
+
+            console.error(
+                "Invalid Deriv message:",
+                event.data
+            );
+
             return;
         }
 
-        // -------------------------------
-        // API error
-        // -------------------------------
+        console.log("DERIV:", data);
+
+        // ====================================
+        // ERROR
+        // ====================================
 
         if (data.error) {
 
-            console.error("Deriv error:", data.error);
+            console.error(
+                "DERIV API ERROR:",
+                data.error
+            );
 
-            status.textContent = "API ERROR ❌";
+            status.textContent =
+                "API ERROR ❌";
+
             signal.textContent =
-                data.error.message || "API error";
+                data.error.message ||
+                "Deriv API error";
 
-            strength.textContent = "Request rejected";
+            strength.textContent =
+                "Request rejected";
 
             return;
         }
 
-        // -------------------------------
-        // Active symbols
-        // -------------------------------
+        // ====================================
+        // ACTIVE SYMBOLS
+        // ====================================
 
         if (
             data.msg_type === "active_symbols" &&
@@ -131,32 +181,70 @@ function connect() {
         ) {
 
             symbols = data.active_symbols
+
                 .map(item => {
 
-                    const symbol =
-                        item.underlying_symbol ||
-                        item.symbol;
-
-                    const name =
-                        item.underlying_symbol_name ||
-                        item.display_name ||
-                        symbol;
-
                     return {
-                        symbol: symbol,
-                        name: name
+
+                        symbol:
+                            item.underlying_symbol,
+
+                        name:
+                            item.underlying_symbol_name,
+
+                        market:
+                            item.market,
+
+                        submarket:
+                            item.submarket
                     };
+
                 })
+
                 .filter(item => {
 
-                    return /volatility/i.test(item.name);
-                })
-                .sort((a, b) =>
-                    a.name.localeCompare(b.name)
-                );
+                    if (!item.symbol) {
+                        return false;
+                    }
+
+                    const text =
+                        (
+                            item.name +
+                            " " +
+                            item.symbol +
+                            " " +
+                            item.market +
+                            " " +
+                            item.submarket
+                        ).toLowerCase();
+
+                    return (
+                        text.includes("volatility") ||
+                        /[0-9]+hz[0-9]+v/i.test(
+                            item.symbol
+                        ) ||
+                        /r_[0-9]+/i.test(
+                            item.symbol
+                        );
+                    });
+
+            // Remove duplicates
+            const unique = {};
+
+            symbols.forEach(item => {
+
+                unique[item.symbol] = item;
+            });
+
+            symbols =
+                Object.values(unique);
+
+            symbols.sort((a, b) =>
+                a.name.localeCompare(b.name)
+            );
 
             console.log(
-                "VOLATILITY MARKETS:",
+                "VOLATILITY SYMBOLS:",
                 symbols
             );
 
@@ -165,48 +253,69 @@ function connect() {
                 status.textContent =
                     "NO VOLATILITY MARKETS ❌";
 
+                marketCount.textContent =
+                    "No Volatility symbols returned.";
+
                 strength.textContent =
-                    "Deriv returned no Volatility symbols.";
+                    "Check the Deriv response.";
 
                 return;
             }
 
+            // Build selector
             buildMarketList();
 
-            // Subscribe to every available
-            // Volatility market.
+            // Select first market
+            selectedSymbol =
+                symbols[0].symbol;
+
+            marketSelect.value =
+                selectedSymbol;
+
+            // Prepare data
             symbols.forEach(item => {
 
                 marketData[item.symbol] = {
+
                     prices: [],
+
                     rise: 0,
+
                     fall: 0,
+
                     lastPrice: null,
+
                     ticks: 0
                 };
 
-                subscribeToMarket(item.symbol);
             });
 
-            selectedSymbol = symbols[0].symbol;
-
-            marketSelect.value = selectedSymbol;
-
-            updateDisplay();
+            // Subscribe ONLY to selected market
+            subscribeToMarket(
+                selectedSymbol
+            );
 
             status.textContent =
                 "LIVE VOLATILITY DATA 🟢";
 
             strength.textContent =
+                "Waiting for ticks...";
+
+            marketCount.textContent =
                 symbols.length +
-                " Volatility markets connected";
+                " Volatility markets found.";
+
+            updateDisplay();
         }
 
-        // -------------------------------
-        // Live tick
-        // -------------------------------
+        // ====================================
+        // TICK
+        // ====================================
 
-        if (data.msg_type === "tick" && data.tick) {
+        if (
+            data.msg_type === "tick" &&
+            data.tick
+        ) {
 
             const symbol =
                 data.tick.underlying_symbol ||
@@ -215,19 +324,25 @@ function connect() {
             const price =
                 Number(data.tick.quote);
 
-            if (!symbol || !Number.isFinite(price)) {
+            if (
+                !symbol ||
+                !Number.isFinite(price)
+            ) {
                 return;
             }
 
-            processTick(symbol, price);
+            processTick(
+                symbol,
+                price
+            );
         }
     };
 
-    // -------------------------------
-    // WebSocket error
-    // -------------------------------
+    // ======================================
+    // ERROR
+    // ======================================
 
-    ws.onerror = function (error) {
+    ws.onerror = function(error) {
 
         console.error(
             "WebSocket error:",
@@ -238,14 +353,14 @@ function connect() {
             "WEBSOCKET ERROR ❌";
 
         strength.textContent =
-            "Connection failed";
+            "Connection problem";
     };
 
-    // -------------------------------
-    // WebSocket closed
-    // -------------------------------
+    // ======================================
+    // CLOSED
+    // ======================================
 
-    ws.onclose = function (event) {
+    ws.onclose = function(event) {
 
         console.log(
             "WebSocket closed:",
@@ -259,19 +374,35 @@ function connect() {
         strength.textContent =
             "Reconnecting...";
 
-        setTimeout(connect, 3000);
+        clearTimeout(
+            reconnectTimer
+        );
+
+        reconnectTimer =
+            setTimeout(
+                connect,
+                3000
+            );
     };
 }
 
-// -------------------------------
-// Subscribe to one market
-// -------------------------------
+// ==========================================
+// SUBSCRIBE TO MARKET
+// ==========================================
 
 function subscribeToMarket(symbol) {
 
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
+    if (
+        !ws ||
+        ws.readyState !== WebSocket.OPEN
+    ) {
         return;
     }
+
+    console.log(
+        "SUBSCRIBING TO:",
+        symbol
+    );
 
     ws.send(JSON.stringify({
 
@@ -281,20 +412,21 @@ function subscribeToMarket(symbol) {
 
         req_id:
             Math.floor(
-                Math.random() * 100000
+                Math.random() * 1000000
             )
 
     }));
 
-    console.log(
-        "Subscribed:",
-        symbol
-    );
+    status.textContent =
+        "SUBSCRIBED 🟢";
+
+    strength.textContent =
+        "Receiving market data...";
 }
 
-// -------------------------------
-// Build market dropdown
-// -------------------------------
+// ==========================================
+// BUILD MARKET LIST
+// ==========================================
 
 function buildMarketList() {
 
@@ -303,104 +435,134 @@ function buildMarketList() {
     symbols.forEach(item => {
 
         const option =
-            document.createElement("option");
+            document.createElement(
+                "option"
+            );
 
-        option.value = item.symbol;
+        option.value =
+            item.symbol;
 
         option.textContent =
-            item.name;
+            item.name +
+            " (" +
+            item.symbol +
+            ")";
 
-        marketSelect.appendChild(option);
+        marketSelect.appendChild(
+            option
+        );
     });
-
-    marketCount.textContent =
-        symbols.length +
-        " Volatility markets found on Deriv.";
 }
 
-// -------------------------------
-// Market selection
-// -------------------------------
+// ==========================================
+// MARKET CHANGED
+// ==========================================
 
 marketSelect.addEventListener(
     "change",
-    function () {
+    function() {
 
         selectedSymbol =
             this.value;
 
+        console.log(
+            "Selected:",
+            selectedSymbol
+        );
+
         resetMainDisplay();
+
+        subscribeToMarket(
+            selectedSymbol
+        );
 
         updateDisplay();
     }
 );
 
-// -------------------------------
-// Process incoming tick
-// -------------------------------
+// ==========================================
+// PROCESS TICK
+// ==========================================
 
-function processTick(symbol, price) {
+function processTick(
+    symbol,
+    price
+) {
 
     if (!marketData[symbol]) {
 
         marketData[symbol] = {
 
             prices: [],
-            rise: 0,
-            fall: 0,
-            lastPrice: null,
-            ticks: 0
 
+            rise: 0,
+
+            fall: 0,
+
+            lastPrice: null,
+
+            ticks: 0
         };
     }
 
     const data =
         marketData[symbol];
 
-    // Compare with previous price
-    if (data.lastPrice !== null) {
+    // Compare price
+    if (
+        data.lastPrice !== null
+    ) {
 
-        if (price > data.lastPrice) {
+        if (
+            price >
+            data.lastPrice
+        ) {
 
             data.rise++;
 
-        } else if (price < data.lastPrice) {
+        } else if (
+            price <
+            data.lastPrice
+        ) {
 
             data.fall++;
         }
     }
 
-    data.lastPrice = price;
+    data.lastPrice =
+        price;
 
-    data.prices.push(price);
+    data.prices.push(
+        price
+    );
 
     data.ticks++;
 
-    // Keep only recent movement
-    if (data.prices.length > WINDOW) {
+    // Keep latest 30 prices
+    if (
+        data.prices.length >
+        WINDOW
+    ) {
 
         data.prices.shift();
+
+        recalculateCounts(
+            data
+        );
     }
 
-    // Keep counts aligned with window
-    const movementCount =
-        data.rise + data.fall;
-
-    if (movementCount > WINDOW - 1) {
-
-        recalculateCounts(data);
-    }
-
-    // Update selected market
-    if (symbol === selectedSymbol) {
+    // Update screen
+    if (
+        symbol === selectedSymbol
+    ) {
 
         updateDisplay();
     }
 }
 
-// -------------------------------
-// Recalculate recent movement
-// -------------------------------
+// ==========================================
+// RECALCULATE
+// ==========================================
 
 function recalculateCounts(data) {
 
@@ -430,9 +592,9 @@ function recalculateCounts(data) {
     }
 }
 
-// -------------------------------
-// Update scanner display
-// -------------------------------
+// ==========================================
+// UPDATE DISPLAY
+// ==========================================
 
 function updateDisplay() {
 
@@ -443,7 +605,10 @@ function updateDisplay() {
     const data =
         marketData[selectedSymbol];
 
-    if (!data || data.lastPrice === null) {
+    if (
+        !data ||
+        data.lastPrice === null
+    ) {
 
         tick.textContent =
             "Waiting...";
@@ -461,42 +626,65 @@ function updateDisplay() {
     }
 
     const total =
-        data.rise + data.fall;
+        data.rise +
+        data.fall;
 
+    tick.textContent =
+        data.lastPrice;
+
+    // Need enough movement
     if (total < 5) {
-
-        tick.textContent =
-            data.lastPrice;
 
         signal.textContent =
             "WAIT ⏳";
 
         confidence.textContent =
-            "Collecting";
+            Math.round(
+                total > 0
+                    ? Math.max(
+                        (data.rise / total) * 100,
+                        (data.fall / total) * 100
+                    )
+                    : 50
+            ) + "%";
 
         strength.textContent =
-            "Need more ticks";
+            "Collecting | Rise: " +
+            data.rise +
+            " | Fall: " +
+            data.fall +
+            " | Ticks: " +
+            data.ticks;
 
         return;
     }
 
     const risePercent =
-        (data.rise / total) * 100;
+        (
+            data.rise /
+            total
+        ) * 100;
 
     const fallPercent =
-        (data.fall / total) * 100;
+        (
+            data.fall /
+            total
+        ) * 100;
 
     let currentSignal =
         "WAIT ⏳";
 
-    let currentConfidence = 50;
+    let currentConfidence =
+        Math.round(
+            Math.max(
+                risePercent,
+                fallPercent
+            )
+        );
 
-    let currentStrength =
-        "Weak";
-
-    // -------------------------------
-    // Signal engine
-    // -------------------------------
+    // ======================================
+    // SIGNAL
+    // ======================================
 
     if (
         risePercent >= MIN_CONFIDENCE &&
@@ -506,9 +694,6 @@ function updateDisplay() {
         currentSignal =
             "⬆️ RISE";
 
-        currentConfidence =
-            Math.round(risePercent);
-
     } else if (
         fallPercent >= MIN_CONFIDENCE &&
         fallPercent > risePercent
@@ -516,50 +701,33 @@ function updateDisplay() {
 
         currentSignal =
             "⬇️ FALL";
-
-        currentConfidence =
-            Math.round(fallPercent);
-
-    } else {
-
-        currentSignal =
-            "WAIT ⏳";
-
-        currentConfidence =
-            Math.round(
-                Math.max(
-                    risePercent,
-                    fallPercent
-                )
-            );
     }
 
-    // -------------------------------
-    // Strength
-    // -------------------------------
+    // ======================================
+    // STRENGTH
+    // ======================================
 
-    if (currentConfidence >= 75) {
+    let currentStrength =
+        "WEAK";
+
+    if (
+        currentConfidence >= 75
+    ) {
 
         currentStrength =
             "STRONG";
 
-    } else if (currentConfidence >= 65) {
+    } else if (
+        currentConfidence >= 65
+    ) {
 
         currentStrength =
             "MEDIUM";
-
-    } else {
-
-        currentStrength =
-            "WEAK";
     }
 
-    // -------------------------------
-    // Display
-    // -------------------------------
-
-    tick.textContent =
-        data.lastPrice;
+    // ======================================
+    // DISPLAY
+    // ======================================
 
     signal.textContent =
         currentSignal;
@@ -577,9 +745,9 @@ function updateDisplay() {
         data.ticks;
 }
 
-// -------------------------------
-// Reset display when market changes
-// -------------------------------
+// ==========================================
+// RESET
+// ==========================================
 
 function resetMainDisplay() {
 
@@ -596,8 +764,8 @@ function resetMainDisplay() {
         "Loading selected market...";
 }
 
-// -------------------------------
-// Start
-// -------------------------------
+// ==========================================
+// START
+// ==========================================
 
 connect();
